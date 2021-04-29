@@ -522,6 +522,7 @@ python2.7-dev					install
 python2.7-minimal				install
 python3						install
 python3-apt					install
+python3-click					install
 python3-crcmod					install
 python3-dbus					install
 python3-dev					install
@@ -529,7 +530,9 @@ python3-distro-info				install
 python3-distutils				install
 python3-lib2to3					install
 python3-minimal					install
+python3-paramiko				install
 python3-pkg-resources				install
+python3-requests				install
 python3-virtualenv				install
 python3.7					install
 python3.7-dev					install

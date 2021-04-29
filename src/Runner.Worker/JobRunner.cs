@@ -43,14 +43,16 @@ namespace GitHub.Runner.Worker
 
             ServiceEndpoint systemConnection = message.Resources.Endpoints.Single(x => string.Equals(x.Name, WellKnownServiceEndpointNames.SystemVssConnection, StringComparison.OrdinalIgnoreCase));
 
-            // Run QEMU
-            var qemuProc = new Process();
+            // Spawn Google VM
+            var spawnMachineProc = new Process();
             var sshfsProc = new Process();
             var instanceNumber = Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
             var virtDir = Path.Combine(
                     new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName,
                     "virt");
             var ghJson = message.ContextData["github"].ToJToken();
+            // TODO get IP of the Virtual Machine
+            // TODO replace information about qemu because we're going to get rid of this and use Google VMs
             string virtIp = $"172.17.{instanceNumber}.2";
 
             Trace.Info($"Runner instance: {instanceNumber}");
@@ -113,12 +115,12 @@ namespace GitHub.Runner.Worker
 
                 Trace.Info($"ContainerFile: {jobContainerFile}");
 
-                qemuProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-                qemuProc.StartInfo.Arguments = $"run_image.sh -n {instanceNumber} -s {jobContainerFile}";
-                qemuProc.StartInfo.WorkingDirectory = virtDir;
-                qemuProc.StartInfo.UseShellExecute = false;
-                qemuProc.StartInfo.RedirectStandardError = true;
-                qemuProc.StartInfo.RedirectStandardOutput = true;
+                spawnMachineProc.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
+                spawnMachineProc.StartInfo.Arguments = $"create_preemptible_vm.py -n {instanceNumber} -s {jobContainerFile}";
+                spawnMachineProc.StartInfo.WorkingDirectory = virtDir;
+                spawnMachineProc.StartInfo.UseShellExecute = false;
+                spawnMachineProc.StartInfo.RedirectStandardError = true;
+                spawnMachineProc.StartInfo.RedirectStandardOutput = true;
 
                 sshfsProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
                 sshfsProc.StartInfo.Arguments = $"sshfs.sh {instanceNumber} {WorkspaceDirectory}";
@@ -131,12 +133,12 @@ namespace GitHub.Runner.Worker
                 _tempDirectoryManager = HostContext.GetService<ITempDirectoryManager>();
                 _tempDirectoryManager.InitializeTempDirectory(jobContext);
 
-                qemuProc.Start();
-                Trace.Info($"Starting QEMU with start script PID {qemuProc.Id}");
+                spawnMachineProc.Start();
+                Trace.Info($"Starting VM with start script PID {spawnMachineProc.Id}");
 
                 var qemuToGithub = true;
 
-                using (StreamReader qemuOut = qemuProc.StandardOutput)
+                using (StreamReader qemuOut = spawnMachineProc.StandardOutput)
                 {
                     string line;
                     while((line = qemuOut.ReadLine()) != null)
@@ -155,18 +157,18 @@ namespace GitHub.Runner.Worker
                     }
                 }
 
-                qemuProc.WaitForExit();
-                Trace.Info("QEMU is ready.");
+                spawnMachineProc.WaitForExit();
+                Trace.Info("VM is ready.");
                 qemuCtx.Complete();
 
-                if (qemuProc.ExitCode != 0)
+                if (spawnMachineProc.ExitCode != 0)
                 {
-                    var qemuNonZeroExitCode = $"VM starter exited with non-zero exit code: {qemuProc.ExitCode}";
+                    var qemuNonZeroExitCode = $"VM starter exited with non-zero exit code: {spawnMachineProc.ExitCode}";
                     qemuCtx.Output(qemuNonZeroExitCode);
                     Trace.Info(qemuNonZeroExitCode);
                     jobContext.Error(qemuNonZeroExitCode);
 
-                    using (StreamReader qemuErr = qemuProc.StandardError)
+                    using (StreamReader qemuErr = spawnMachineProc.StandardError)
                     {
                         string line;
                         while((line = qemuErr.ReadLine()) != null)
