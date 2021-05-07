@@ -53,7 +53,7 @@ namespace GitHub.Runner.Worker
             var ghJson = message.ContextData["github"].ToJToken();
             // TODO get IP of the Virtual Machine
             // TODO replace information about qemu because we're going to get rid of this and use Google VMs
-            string virtIp = $"172.17.{instanceNumber}.2";
+            string virtIp = $"auto-spawned{instanceNumber}";
 
             Trace.Info($"Runner instance: {instanceNumber}");
 
@@ -111,12 +111,8 @@ namespace GitHub.Runner.Worker
 
                 Trace.Info($"Container: ${container.Image}");
 
-                var jobContainerFile = container.Image.Replace(":", "_");
-
-                Trace.Info($"ContainerFile: {jobContainerFile}");
-
                 spawnMachineProc.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
-                spawnMachineProc.StartInfo.Arguments = $"create_preemptible_vm.py -n {instanceNumber} -s {jobContainerFile}";
+                spawnMachineProc.StartInfo.Arguments = $"create_preemptible_vm.py -n {instanceNumber} -s {container.Image}";
                 spawnMachineProc.StartInfo.WorkingDirectory = virtDir;
                 spawnMachineProc.StartInfo.UseShellExecute = false;
                 spawnMachineProc.StartInfo.RedirectStandardError = true;
@@ -384,36 +380,36 @@ namespace GitHub.Runner.Worker
                 }
 
                 Trace.Info($"Killing QEMU with PID {virtPid}");
-                killProc.Start();
-                killProc.WaitForExit();
+                //killProc.Start();
+                //killProc.WaitForExit();
 
-                var waitPid = 5;
+                //var waitPid = 5;
 
-                for (int i = 1; i <= waitPid; i++)
-                {
-                    Trace.Info($"[{i}/{waitPid}] waiting for QEMU to die");
-                    if (!File.Exists(virtPidPath))
-                    {
-                        break;
-                    }
+                //for (int i = 1; i <= waitPid; i++)
+                //{
+                //    Trace.Info($"[{i}/{waitPid}] waiting for QEMU to die");
+                //    if (!File.Exists(virtPidPath))
+                //    {
+                //        break;
+                //    }
 
-                    if (i == waitPid && File.Exists(virtPidPath))
-                    {
-                        Trace.Info($"Sending SIGKILL to {virtPid}");
-                        killProc2.Start();
-                        killProc2.WaitForExit();
-                        try
-                        {
-                            File.Delete(virtPidPath);
-                            Trace.Info($"Removed {virtPidPath}");
-                        }
-                        catch (Exception e)
-                        {
-                            Trace.Info($"Couldn't remove {virtPidPath}: {e}");
-                        }
-                    }
-                    Thread.Sleep(1000);
-                }
+                //    if (i == waitPid && File.Exists(virtPidPath))
+                //    {
+                //        Trace.Info($"Sending SIGKILL to {virtPid}");
+                //        killProc2.Start();
+                //        killProc2.WaitForExit();
+                //        try
+                //        {
+                //            File.Delete(virtPidPath);
+                //            Trace.Info($"Removed {virtPidPath}");
+                //        }
+                //        catch (Exception e)
+                //        {
+                //            Trace.Info($"Couldn't remove {virtPidPath}: {e}");
+                //        }
+                //    }
+                //    Thread.Sleep(1000);
+                //}
 
                 await ShutdownQueue(throwOnFailure: false);
             }

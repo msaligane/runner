@@ -11,7 +11,7 @@ sshSend() {
     /usr/bin/ssh -q \
         -o "UserKnownHostsFile /dev/null" \
         -o "StrictHostKeyChecking no" \
-        scalerunner@172.17.$PREFIX.2 << EOF
+        scalerunner@auto-spawned$PREFIX << EOF
 sudo -s
 $@
 EOF

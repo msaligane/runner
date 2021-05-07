@@ -21,9 +21,10 @@ def main(instance_number, container_file):
     overlay_size_gb = config['DEFAULT'].get('overlay_size_gb', 20)
 
     project_id = 'github-runner-test'
-    zone = 'europe-west1-b'
+    zone = 'europe-west4-a'
     instance_name = f'auto-spawned{instance_number}'
     print(f'{instance_name=}')
+    print(f'{container_file=}')
     subnet = 'runner-test'
 
     key = (open('/home/runner/.ssh/id_rsa.pub')
@@ -50,7 +51,7 @@ def main(instance_number, container_file):
                 'https://www.googleapis.com/auth/servicecontrol,'
                 'https://www.googleapis.com/auth/service.management.readonly,'
                 'https://www.googleapis.com/auth/trace.append '
-                '--image=scalenode-2021-05-05--13-30-30 --image-project=github-runner-test '
+                '--image=scalenode-2021-05-06--11-54-59 --image-project=github-runner-test '
                 f'--boot-disk-size={overlay_size_gb}GB '
                 '--boot-disk-type=pd-balanced '
                 f'--boot-disk-device-name={instance_name} '
@@ -96,12 +97,14 @@ def main(instance_number, container_file):
     commands = (
         'uname -a',
         'sudo mkdir -p /mnt/1 /mnt/2/work /mnt/3',
-        #'sudo singularity instance start -C -e --dns 8.8.8.8 --overlay /mnt/1 --bind /mnt/2:/root /tmp/container.sif i',
+	f'sudo singularity pull /mnt/container.sif docker://{container_file}',
+        'sudo singularity instance start -C -e --dns 8.8.8.8 --overlay /mnt/1 --bind /mnt/2:/root /mnt/container.sif i',
         #'SARGRAPH_OUTPUT_TYPE=svg sargraph chart start',
     )
 
     for cmd in commands:
-        _, _, stderr = ssh.exec_command(cmd)
+        _, stdout, stderr = ssh.exec_command(cmd)
+        print(stdout.readlines())
         print(stderr.readlines())
 
 if __name__ == '__main__':

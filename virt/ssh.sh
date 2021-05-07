@@ -1,6 +1,6 @@
 #!/bin/bash
 
-IP=172.17.$1.2
+IP=auto-spawned$1
 
 echo "Connecting to $IP"
 

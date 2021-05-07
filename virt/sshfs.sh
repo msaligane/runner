@@ -2,7 +2,7 @@
 
 cd $(dirname $0)
 
-IP=172.17.$1.2
+IP=auto-spawned$1
 SHARE_PATH=$(realpath ../_layout)/_work_$1/$2
 REMOTE_PATH="scalerunner@$IP:/mnt/2/work"
 
