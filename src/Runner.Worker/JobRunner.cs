@@ -15,6 +15,8 @@ using System.Net.Http;
 using GitHub.Runner.Common;
 using GitHub.Runner.Sdk;
 using GitHub.DistributedTask.Pipelines.ContextData;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace GitHub.Runner.Worker
 {
@@ -47,12 +49,9 @@ namespace GitHub.Runner.Worker
             var spawnMachineProc = new Process();
             var sshfsProc = new Process();
             var instanceNumber = Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
-            var virtDir = Path.Combine(
-                    new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName,
-                    "virt");
+            var rootDir = new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName;
+            var virtDir = Path.Combine(rootDir, "virt");
             var ghJson = message.ContextData["github"].ToJToken();
-            // TODO get IP of the Virtual Machine
-            // TODO replace information about qemu because we're going to get rid of this and use Google VMs
             string virtIp = $"auto-spawned{instanceNumber}";
 
             Trace.Info($"Runner instance: {instanceNumber}");
@@ -76,7 +75,9 @@ namespace GitHub.Runner.Worker
             message.Variables["system.qemuIp"] = virtIp;
             message.Variables["system.containerWorkspace"] = WorkspaceDirectory;
 
-            Trace.Info($"QEMU IP: {virtIp}");
+            Trace.Info($"VIRT IP: {virtIp}");
+
+            dynamic vmSpecs = JObject.Parse(File.ReadAllText(Path.Combine(rootDir, ".vm_specs.json")));
 
             // Setup the job server and job server queue.
             var jobServer = HostContext.GetService<IJobServer>();
@@ -328,20 +329,20 @@ namespace GitHub.Runner.Worker
                     runnerShutdownRegistration = null;
                 }
 
-                string virtPid = "", virtPidPath = Path.Combine(virtDir, "work", $"{instanceNumber}_qemu.pid");
+                //string virtPid = "", virtPidPath = Path.Combine(virtDir, "work", $"{instanceNumber}_qemu.pid");
 
-                try
-                {
-                    using (StreamReader reader = new StreamReader(new FileStream(virtPidPath, FileMode.Open)))
-                    {
-                        virtPid = reader.ReadLine();
-                    }
-                }
-                catch (IOException e)
-                {
-                    Trace.Error("Reading QEMU work files failed, consult the exception below.");
-                    Trace.Error(e.ToString());
-                }
+                //try
+                //{
+                //    using (StreamReader reader = new StreamReader(new FileStream(virtPidPath, FileMode.Open)))
+                //    {
+                //        virtPid = reader.ReadLine();
+                //    }
+                //}
+                //catch (IOException e)
+                //{
+                //    Trace.Error("Reading QEMU work files failed, consult the exception below.");
+                //    Trace.Error(e.ToString());
+                //}
 
                 var umountProc = new Process();
                 umountProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
@@ -351,21 +352,33 @@ namespace GitHub.Runner.Worker
                 umountProc.StartInfo.RedirectStandardError = true;
                 umountProc.StartInfo.RedirectStandardOutput = true;
                 
-                var killProc = new Process();
-                killProc.StartInfo.FileName = WhichUtil.Which("kill", trace: Trace);
-                killProc.StartInfo.Arguments = virtPid;
-                killProc.StartInfo.WorkingDirectory = virtDir;
-                killProc.StartInfo.UseShellExecute = false;
+                //var killProc = new Process();
+                //killProc.StartInfo.FileName = WhichUtil.Which("kill", trace: Trace);
+                //killProc.StartInfo.Arguments = virtPid;
+                //killProc.StartInfo.WorkingDirectory = virtDir;
+                //killProc.StartInfo.UseShellExecute = false;
 
-                var killProc2 = new Process();
-                killProc2.StartInfo.FileName = WhichUtil.Which("kill", trace: Trace);
-                killProc2.StartInfo.Arguments = $"-s SIGKILL {virtPid}";
-                killProc2.StartInfo.WorkingDirectory = virtDir;
-                killProc2.StartInfo.UseShellExecute = false;
+                //var killProc2 = new Process();
+                //killProc2.StartInfo.FileName = WhichUtil.Which("kill", trace: Trace);
+                //killProc2.StartInfo.Arguments = $"-s SIGKILL {virtPid}";
+                //killProc2.StartInfo.WorkingDirectory = virtDir;
+                //killProc2.StartInfo.UseShellExecute = false;
+
+                var gZone = vmSpecs.gcp.zone;
+                var gcloudDelProc = new Process();
+                gcloudDelProc.StartInfo.FileName = WhichUtil.Which("gcloud", trace: Trace);
+                gcloudDelProc.StartInfo.Arguments = $"compute instances delete --delete-disks=boot --zone={gZone} {virtIp}";
+                gcloudDelProc.StartInfo.WorkingDirectory = virtDir;
+                gcloudDelProc.StartInfo.UseShellExecute = false;
 
                 Trace.Info($"Unmouting sshfs from {WorkspaceDirectory}");
                 umountProc.Start();
                 umountProc.WaitForExit();
+
+                Trace.Info($"Destroying {virtIp} from {gZone}");
+
+                gcloudDelProc.Start();
+                gcloudDelProc.WaitForExit();
 
                 if (umountProc.ExitCode != 0)
                 {
@@ -379,7 +392,7 @@ namespace GitHub.Runner.Worker
                     jobContext.Error(umountError);
                 }
 
-                Trace.Info($"Killing QEMU with PID {virtPid}");
+                //Trace.Info($"Killing QEMU with PID {virtPid}");
                 //killProc.Start();
                 //killProc.WaitForExit();
 
