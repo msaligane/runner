@@ -1,28 +1,24 @@
 #!/usr/bin/python3
-import subprocess
-import configparser
-import click
-import paramiko
+import subprocess, json, click, paramiko
+from collections import namedtuple
 
+def load_config():
+    with open('../.vm_specs.json', 'r') as f:
+        return json.load(f, object_hook=lambda d: namedtuple('vm_specs', d.keys())(*d.values()))
 
 @click.command()
 @click.option('-n', '--instance-number', help='Instance number', required=True)
 @click.option('-s', '--container-file', help='Container file', required=True)
 def main(instance_number, container_file):
-    # TODO use container_file
+    c = load_config()
 
-    config = configparser.ConfigParser()
-    config['DEFAULT'] = {}
+    machine_type = c.gcp.type
+    overlay_size_gb = c.machine.disk
 
-    config_file = '../config.ini'
-    config.read(config_file)
-    
-    machine_type = config['DEFAULT'].get('machine_type', 'n2-standard-2')
-    overlay_size_gb = config['DEFAULT'].get('overlay_size_gb', 20)
-
-    project_id = 'github-runner-test'
-    zone = 'europe-west4-a'
+    project_id = c.gcp.project
+    zone = c.gcp.zone
     instance_name = f'auto-spawned{instance_number}'
+
     print(f'{instance_name=}')
     print(f'{container_file=}')
     subnet = 'runner-test'
@@ -51,7 +47,7 @@ def main(instance_number, container_file):
                 'https://www.googleapis.com/auth/servicecontrol,'
                 'https://www.googleapis.com/auth/service.management.readonly,'
                 'https://www.googleapis.com/auth/trace.append '
-                '--image=scalenode-2021-05-06--11-54-59 --image-project=github-runner-test '
+                f'--image={c.gcp.image} --image-project={c.gcp.project} '
                 f'--boot-disk-size={overlay_size_gb}GB '
                 '--boot-disk-type=pd-balanced '
                 f'--boot-disk-device-name={instance_name} '
@@ -59,8 +55,7 @@ def main(instance_number, container_file):
                 shell=True
         ).decode("utf-8")
 
-        with open('create_vm.log', 'w') as f:
-            f.write(output)
+        print(output)
 
     except subprocess.CalledProcessError as err:
         # failed to spawn the machine
