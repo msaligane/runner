@@ -1,10 +1,13 @@
 #!/usr/bin/python3
-import subprocess, json, click, paramiko
+import sys, subprocess, json, click, paramiko, time
 from collections import namedtuple
 
 def load_config():
     with open('../.vm_specs.json', 'r') as f:
         return json.load(f, object_hook=lambda d: namedtuple('vm_specs', d.keys())(*d.values()))
+
+def elapsed(start):
+    return round(time.time() - start, 2)
 
 @click.command()
 @click.option('-n', '--instance-number', help='Instance number', required=True)
@@ -19,58 +22,51 @@ def main(instance_number, container_file):
     zone = c.gcp.zone
     instance_name = f'auto-spawned{instance_number}'
 
-    print(f'{instance_name=}')
-    print(f'{container_file=}')
-    subnet = 'runner-test'
+    print(f'Spawning a GCP machine in {c.gcp.zone}...')
+    print(f'Instance name:\t {instance_name}')
+    print(f'Instance type:\t {c.gcp.type}')
 
     key = (open('/home/runner/.ssh/id_rsa.pub')
           .read()
           .strip()
 	  .translate(str.maketrans({'+': r'\+', ' ': r'\ '}))	
     )
+
+    gcloud_start = time.time()
+
     try:
         output = subprocess.check_output(
-                f'gcloud beta compute --project={project_id} '
-                f'instances create {instance_name} --zone={zone} '
-                f'--machine-type={machine_type} --subnet={subnet} '
+                'gcloud beta compute --verbosity=error '
+                f'--project={c.gcp.project} '
+                f'instances create {instance_name} --zone={c.gcp.zone} '
+                f'--machine-type={machine_type} --subnet={c.gcp.subnet} '
                 '--no-address --network-tier=PREMIUM '
                 '--metadata=serial-port-enable=true,'
                 'ssh-keys=coordinator:'
                 f'{key} '
                 '--no-restart-on-failure --tags=runners '
                 '--maintenance-policy=TERMINATE --preemptible '
-                '--service-account=238820661769-compute'
-                '@developer.gserviceaccount.com '
-                '--scopes=https://www.googleapis.com/auth/devstorage.read_only,'
-                'https://www.googleapis.com/auth/logging.write,'
-                'https://www.googleapis.com/auth/monitoring.write,'
-                'https://www.googleapis.com/auth/servicecontrol,'
-                'https://www.googleapis.com/auth/service.management.readonly,'
-                'https://www.googleapis.com/auth/trace.append '
+                '--no-service-account '
+                '--no-scopes '
                 f'--image={c.gcp.image} --image-project={c.gcp.project} '
                 f'--boot-disk-size={overlay_size_gb}GB '
                 '--boot-disk-type=pd-balanced '
                 f'--boot-disk-device-name={instance_name} '
                 '--reservation-affinity=any',
-                shell=True
+                shell=True,
+                stderr=subprocess.STDOUT,
         ).decode("utf-8")
 
-        print(output)
+        print('\n'+output.replace(c.gcp.project, '***'))
 
     except subprocess.CalledProcessError as err:
-        # failed to spawn the machine
-        print(err)
+        print('\n'+err.output.decode().replace(c.gcp.project, '***'))
         exit()
 
-    except OSError:
-        print('unable to write to log file')
+    print(f'Machine spawned in {elapsed(gcloud_start)} seconds.')
     
-    info = ' '.join(output.split('\n')[1].split())
-    # gcloud prints these to stdout in [1] line, separated with spaces
-    name, zone, mach_type, preemptible, internal_ip, status = info.split(' ')
-
     # this is the name recognized by DNS in Google
-    target = f'{name}.{zone}.c.{project_id}.internal'
+    target = f'{instance_name}.{c.gcp.zone}.c.{c.gcp.project}.internal'
 
     # scp public key to authorized_keys of the minion machine
     try:
@@ -89,18 +85,28 @@ def main(instance_number, container_file):
     ssh.set_missing_host_key_policy(paramiko.client.AutoAddPolicy())
     ssh.connect(target, username='scalerunner')
 
+    sif_location = '/mnt/container.sif'
+
     commands = (
         'uname -a',
         'sudo mkdir -p /mnt/1 /mnt/2/work /mnt/3',
-	f'sudo singularity pull /mnt/container.sif docker://{container_file}',
-        'sudo singularity instance start -C -e --dns 8.8.8.8 --overlay /mnt/1 --bind /mnt/2:/root /mnt/container.sif i',
+        f'echo "Pulling {container_file}..."',
+	    f'sudo singularity pull {sif_location} docker://{container_file}',
+        f'sudo singularity instance start -C -e --dns 8.8.8.8 --overlay /mnt/1 --bind /mnt/2:/root {sif_location} i',
         #'SARGRAPH_OUTPUT_TYPE=svg sargraph chart start',
     )
 
     for cmd in commands:
         _, stdout, stderr = ssh.exec_command(cmd)
-        print(stdout.readlines())
-        print(stderr.readlines())
+
+        stdout_lines = stdout.readlines()
+        stderr_lines = stderr.readlines()
+
+        for l in stdout_lines:
+            print(l.strip())
+
+        for l in stderr_lines:
+            print(l.strip(), file=sys.stderr)
 
 if __name__ == '__main__':
     main()
