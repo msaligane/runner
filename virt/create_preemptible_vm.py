@@ -93,6 +93,7 @@ def main(instance_number, container_file):
         f'echo "Pulling {container_file}..."',
 	    f'sudo singularity pull {sif_location} docker://{container_file}',
         f'sudo singularity instance start -C -e --dns 8.8.8.8 --overlay /mnt/1 --bind /mnt/2:/root {sif_location} i',
+        'sudo iptables -A OUTPUT -d 169.254.169.254 -j DROP'
         #'SARGRAPH_OUTPUT_TYPE=svg sargraph chart start',
     )
 
