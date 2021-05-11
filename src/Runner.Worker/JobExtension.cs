@@ -321,7 +321,7 @@ namespace GitHub.Runner.Worker
                     steps.AddRange(jobSteps);
 
                     // Prepare for orphan process cleanup
-                    _processCleanup = jobContext.Global.Variables.GetBoolean("process.clean") ?? true;
+                    _processCleanup = jobContext.Global.Variables.GetBoolean("process.clean") ?? false;
                     if (_processCleanup)
                     {
                         // Set the RUNNER_TRACKING_ID env variable.
