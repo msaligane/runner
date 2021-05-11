@@ -1,6 +1,8 @@
 #!/usr/bin/python3
-import sys, subprocess, json, click, paramiko, time
+import sys, subprocess, json, click, paramiko, time, functools
 from collections import namedtuple
+
+print = functools.partial(print, flush=True)
 
 def load_config():
     with open('../.vm_specs.json', 'r') as f:
