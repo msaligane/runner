@@ -312,6 +312,33 @@ namespace GitHub.Runner.Worker
                 finally
                 {
                     Trace.Info("Finalize job.");
+
+                    var umountProc = new Process();
+                    umountProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
+                    umountProc.StartInfo.Arguments = $"-e sshfs.sh {instanceNumber} {WorkspaceDirectory}";
+                    umountProc.StartInfo.WorkingDirectory = virtDir;
+                    umountProc.StartInfo.UseShellExecute = false;
+                    umountProc.StartInfo.RedirectStandardError = true;
+                    umountProc.StartInfo.RedirectStandardOutput = true;
+                    
+
+                    var gZone = vmSpecs.gcp.zone;
+                    var gcloudDelProc = new Process();
+                    gcloudDelProc.StartInfo.FileName = WhichUtil.Which("gcloud", trace: Trace);
+                    gcloudDelProc.StartInfo.Arguments = $"compute instances delete --delete-disks=boot --zone={gZone} {virtIp}";
+                    gcloudDelProc.StartInfo.WorkingDirectory = virtDir;
+                    gcloudDelProc.StartInfo.UseShellExecute = false;
+
+                    Trace.Info($"Unmouting sshfs from {WorkspaceDirectory}");
+                    umountProc.Start();
+                    umountProc.WaitForExit();
+
+                    Trace.Info($"Destroying {virtIp} from {gZone}");
+
+                    gcloudDelProc.Start();
+                    gcloudDelProc.WaitForExit();
+
+
                     jobExtension.FinalizeJob(jobContext, message, jobStartTimeUtc);
                 }
 
@@ -329,103 +356,147 @@ namespace GitHub.Runner.Worker
                     runnerShutdownRegistration = null;
                 }
 
-                //string virtPid = "", virtPidPath = Path.Combine(virtDir, "work", $"{instanceNumber}_qemu.pid");
-
-                //try
-                //{
-                //    using (StreamReader reader = new StreamReader(new FileStream(virtPidPath, FileMode.Open)))
-                //    {
-                //        virtPid = reader.ReadLine();
-                //    }
-                //}
-                //catch (IOException e)
-                //{
-                //    Trace.Error("Reading QEMU work files failed, consult the exception below.");
-                //    Trace.Error(e.ToString());
-                //}
-
-                var umountProc = new Process();
-                umountProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-                umountProc.StartInfo.Arguments = $"-e sshfs.sh {instanceNumber} {WorkspaceDirectory}";
-                umountProc.StartInfo.WorkingDirectory = virtDir;
-                umountProc.StartInfo.UseShellExecute = false;
-                umountProc.StartInfo.RedirectStandardError = true;
-                umountProc.StartInfo.RedirectStandardOutput = true;
-                
-                //var killProc = new Process();
-                //killProc.StartInfo.FileName = WhichUtil.Which("kill", trace: Trace);
-                //killProc.StartInfo.Arguments = virtPid;
-                //killProc.StartInfo.WorkingDirectory = virtDir;
-                //killProc.StartInfo.UseShellExecute = false;
-
-                //var killProc2 = new Process();
-                //killProc2.StartInfo.FileName = WhichUtil.Which("kill", trace: Trace);
-                //killProc2.StartInfo.Arguments = $"-s SIGKILL {virtPid}";
-                //killProc2.StartInfo.WorkingDirectory = virtDir;
-                //killProc2.StartInfo.UseShellExecute = false;
-
-                var gZone = vmSpecs.gcp.zone;
-                var gcloudDelProc = new Process();
-                gcloudDelProc.StartInfo.FileName = WhichUtil.Which("gcloud", trace: Trace);
-                gcloudDelProc.StartInfo.Arguments = $"compute instances delete --delete-disks=boot --zone={gZone} {virtIp}";
-                gcloudDelProc.StartInfo.WorkingDirectory = virtDir;
-                gcloudDelProc.StartInfo.UseShellExecute = false;
-
-                Trace.Info($"Unmouting sshfs from {WorkspaceDirectory}");
-                umountProc.Start();
-                umountProc.WaitForExit();
-
-                Trace.Info($"Destroying {virtIp} from {gZone}");
-
-                gcloudDelProc.Start();
-                gcloudDelProc.WaitForExit();
-
-                if (umountProc.ExitCode != 0)
-                {
-                    string umountError;
-                    using (StreamReader umountErr = umountProc.StandardError)
-                    {
-                        umountError = umountErr.ReadToEnd();
-                    }
-
-                    Trace.Error(umountError);
-                    jobContext.Error(umountError);
-                }
-
-                //Trace.Info($"Killing QEMU with PID {virtPid}");
-                //killProc.Start();
-                //killProc.WaitForExit();
-
-                //var waitPid = 5;
-
-                //for (int i = 1; i <= waitPid; i++)
-                //{
-                //    Trace.Info($"[{i}/{waitPid}] waiting for QEMU to die");
-                //    if (!File.Exists(virtPidPath))
-                //    {
-                //        break;
-                //    }
-
-                //    if (i == waitPid && File.Exists(virtPidPath))
-                //    {
-                //        Trace.Info($"Sending SIGKILL to {virtPid}");
-                //        killProc2.Start();
-                //        killProc2.WaitForExit();
-                //        try
-                //        {
-                //            File.Delete(virtPidPath);
-                //            Trace.Info($"Removed {virtPidPath}");
-                //        }
-                //        catch (Exception e)
-                //        {
-                //            Trace.Info($"Couldn't remove {virtPidPath}: {e}");
-                //        }
-                //    }
-                //    Thread.Sleep(1000);
-                //}
-
                 await ShutdownQueue(throwOnFailure: false);
             }
+        }
+
+        private bool FinalizeGcp(IExecutionContext jobContext, Pipelines.AgentJobRequestMessage message, dynamic vmSpecs) {
+            var instanceNumber = Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
+            var virtIp = message.Variables["system.qemuIp"].Value;
+            var virtDir = message.Variables["system.qemuDir"].Value;
+            var WorkspaceDirectory = message.Variables["system.containerWorkspace"].Value;
+            var umountProc = new Process();
+
+            umountProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
+            umountProc.StartInfo.Arguments = $"-e sshfs.sh {instanceNumber} {WorkspaceDirectory}";
+            umountProc.StartInfo.WorkingDirectory = virtDir;
+            umountProc.StartInfo.UseShellExecute = false;
+            umountProc.StartInfo.RedirectStandardError = true;
+            umountProc.StartInfo.RedirectStandardOutput = true;
+
+            var gZone = vmSpecs.gcp.zone;
+            var gcloudDelProc = new Process();
+            gcloudDelProc.StartInfo.FileName = WhichUtil.Which("gcloud", trace: Trace);
+            gcloudDelProc.StartInfo.Arguments = $"compute instances delete --delete-disks=boot --zone={gZone} {virtIp}";
+            gcloudDelProc.StartInfo.WorkingDirectory = virtDir;
+            gcloudDelProc.StartInfo.UseShellExecute = false;
+
+            Trace.Info($"Unmouting sshfs from {WorkspaceDirectory}");
+            umountProc.Start();
+            umountProc.WaitForExit();
+
+            Trace.Info($"Destroying {virtIp} from {gZone}");
+
+            gcloudDelProc.Start();
+            gcloudDelProc.WaitForExit();
+
+            if (umountProc.ExitCode != 0)
+            {
+                string umountError;
+                using (StreamReader umountErr = umountProc.StandardError)
+                {
+                    umountError = umountErr.ReadToEnd();
+                }
+
+                Trace.Error(umountError);
+                jobContext.Error(umountError);
+            }
+
+            return true;
+        }
+
+        private bool FinalizeQemu(IExecutionContext jobContext, Pipelines.AgentJobRequestMessage message, dynamic vmSpecs) {
+            //TODO: restore this code!
+            //
+            //var instanceNumber = Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
+            //var virtIp = message.Variables["system.qemuIp"].Value;
+            //var virtDir = message.Variables["system.qemuDir"].Value;
+            //var WorkspaceDirectory = message.Variables["system.containerWorkspace"].Value;
+            //var umountProc = new Process();
+
+            //umountProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
+            //umountProc.StartInfo.Arguments = $"-e sshfs.sh {instanceNumber} {WorkspaceDirectory}";
+            //umountProc.StartInfo.WorkingDirectory = virtDir;
+            //umountProc.StartInfo.UseShellExecute = false;
+            //umountProc.StartInfo.RedirectStandardError = true;
+            //umountProc.StartInfo.RedirectStandardOutput = true;
+
+            //var killProc = new Process();
+            ////killProc.StartInfo.FileName = WhichUtil.Which("kill", trace: Trace);
+            ////killProc.StartInfo.Arguments = virtPid;
+            ////killProc.StartInfo.WorkingDirectory = virtDir;
+            ////killProc.StartInfo.UseShellExecute = false;
+
+            //var killProc2 = new Process();
+            ////killProc2.StartInfo.FileName = WhichUtil.Which("kill", trace: Trace);
+            ////killProc2.StartInfo.Arguments = $"-s SIGKILL {virtPid}";
+            ////killProc2.StartInfo.WorkingDirectory = virtDir;
+            ////killProc2.StartInfo.UseShellExecute = false;
+            //
+            //Trace.Info($"Unmouting sshfs from {WorkspaceDirectory}");
+            //umountProc.Start();
+            //umountProc.WaitForExit();
+
+            //if (umountProc.ExitCode != 0)
+            //{
+            //    string umountError;
+            //    using (StreamReader umountErr = umountProc.StandardError)
+            //    {
+            //        umountError = umountErr.ReadToEnd();
+            //    }
+
+            //    Trace.Error(umountError);
+            //    jobContext.Error(umountError);
+            //}
+
+            //Trace.Info($"Killing QEMU with PID {virtPid}");
+            //killProc.Start();
+            //killProc.WaitForExit();
+
+            //var waitPid = 5;
+
+            //for (int i = 1; i <= waitPid; i++)
+            //{
+            //    Trace.Info($"[{i}/{waitPid}] waiting for QEMU to die");
+            //    if (!File.Exists(virtPidPath))
+            //    {
+            //        break;
+            //    }
+
+            //    if (i == waitPid && File.Exists(virtPidPath))
+            //    {
+            //        Trace.Info($"Sending SIGKILL to {virtPid}");
+            //        killProc2.Start();
+            //        killProc2.WaitForExit();
+            //        try
+            //        {
+            //            File.Delete(virtPidPath);
+            //            Trace.Info($"Removed {virtPidPath}");
+            //        }
+            //        catch (Exception e)
+            //        {
+            //            Trace.Info($"Couldn't remove {virtPidPath}: {e}");
+            //        }
+            //    }
+            //    Thread.Sleep(1000);
+            //}
+
+            //string virtPid = "", virtPidPath = Path.Combine(virtDir, "work", $"{instanceNumber}_qemu.pid");
+
+            //try
+            //{
+            //    using (StreamReader reader = new StreamReader(new FileStream(virtPidPath, FileMode.Open)))
+            //    {
+            //        virtPid = reader.ReadLine();
+            //    }
+            //}
+            //catch (IOException e)
+            //{
+            //    Trace.Error("Reading QEMU work files failed, consult the exception below.");
+            //    Trace.Error(e.ToString());
+            //}
+
+            return true;
         }
 
         private bool JobPassesSecurityRestrictions(IExecutionContext jobContext)
