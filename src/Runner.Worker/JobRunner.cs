@@ -106,9 +106,15 @@ namespace GitHub.Runner.Worker
 
                 var templateEval = jobContext.ToPipelineTemplateEvaluator();
                 var container = templateEval.EvaluateJobContainer(message.JobContainer, jobContext.ExpressionValues, jobContext.ExpressionFunctions);
+
+                if (!JobPassesSecurityRestrictions(jobContext))
+                {
+                    jobContext.Error("Running job on this worker disallowed by security policy");
+                    return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
+                }
                 
-                IExecutionContext qemuCtx = jobContext.CreateChild(Guid.NewGuid(), "Set up VM", "VM_Init", null, null);
-                qemuCtx.Start();
+                IExecutionContext vmCtx = jobContext.CreateChild(Guid.NewGuid(), "Set up VM", "VM_Init", null, null);
+                vmCtx.Start();
 
                 Trace.Info($"Container: ${container.Image}");
 
@@ -133,46 +139,37 @@ namespace GitHub.Runner.Worker
                 spawnMachineProc.Start();
                 Trace.Info($"Starting VM with start script PID {spawnMachineProc.Id}");
 
-                var qemuToGithub = true;
-
-                using (StreamReader qemuOut = spawnMachineProc.StandardOutput)
+                using (StreamReader vmOut = spawnMachineProc.StandardOutput)
                 {
                     string line;
-                    while((line = qemuOut.ReadLine()) != null)
+                    while((line = vmOut.ReadLine()) != null)
                     {
-                        if (line.Contains("DEBUG START"))
-                        {
-                            qemuToGithub = false;
-                        }
-
-                        if (qemuToGithub)
-                        {
-                            qemuCtx.Output(line);
-                        }
-
+                        vmCtx.Output(line);
                         Trace.Info(line);
                     }
                 }
 
                 spawnMachineProc.WaitForExit();
                 Trace.Info("VM is ready.");
-                qemuCtx.Complete();
+                vmCtx.Complete();
 
                 if (spawnMachineProc.ExitCode != 0)
                 {
-                    var qemuNonZeroExitCode = $"VM starter exited with non-zero exit code: {spawnMachineProc.ExitCode}";
-                    qemuCtx.Output(qemuNonZeroExitCode);
-                    Trace.Info(qemuNonZeroExitCode);
-                    jobContext.Error(qemuNonZeroExitCode);
+                    var vmNonZeroExitCode = $"VM starter exited with non-zero exit code: {spawnMachineProc.ExitCode}";
+                    vmCtx.Output(vmNonZeroExitCode);
+                    Trace.Info(vmNonZeroExitCode);
+                    jobContext.Error(vmNonZeroExitCode);
 
-                    using (StreamReader qemuErr = spawnMachineProc.StandardError)
+                    using (StreamReader vmErr = spawnMachineProc.StandardError)
                     {
                         string line;
-                        while((line = qemuErr.ReadLine()) != null)
+                        while((line = vmErr.ReadLine()) != null)
                         {
                             Trace.Info(line);
                         }
                     }
+
+                    FinalizeGcp(jobContext, message, vmSpecs);
 
                     return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
                 }
@@ -201,14 +198,11 @@ namespace GitHub.Runner.Worker
                     Trace.Error(sshfsError);
                     jobContext.Error($"sshfs: exit code {sshfsProc.ExitCode}, err {sshfsError}");
 
+                    FinalizeGcp(jobContext, message, vmSpecs);
+
                     return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
                 }
 
-                if (!JobPassesSecurityRestrictions(jobContext))
-                {
-                    jobContext.Error("Running job on this worker disallowed by security policy");
-                    return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
-                }
 
                 jobContext.Debug($"Starting: {message.JobDisplayName}");
 
@@ -228,6 +222,7 @@ namespace GitHub.Runner.Worker
                         default:
                             throw new ArgumentException(HostContext.RunnerShutdownReason.ToString(), nameof(HostContext.RunnerShutdownReason));
                     }
+                    FinalizeGcp(jobContext, message, vmSpecs);
                     jobContext.AddIssue(new Issue() { Type = IssueType.Error, Message = errorMessage });
                 });
 
