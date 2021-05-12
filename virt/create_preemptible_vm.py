@@ -4,12 +4,20 @@ from collections import namedtuple
 
 print = functools.partial(print, flush=True)
 
+USER = 'scalerunner'
+
 def load_config():
     with open('../.vm_specs.json', 'r') as f:
         return json.load(f, object_hook=lambda d: namedtuple('vm_specs', d.keys())(*d.values()))
 
 def elapsed(start):
     return round(time.time() - start, 2)
+
+def get_ssh():
+    ssh = paramiko.SSHClient()
+    ssh.get_host_keys()
+    ssh.set_missing_host_key_policy(paramiko.client.AutoAddPolicy())
+    return ssh
 
 @click.command()
 @click.option('-n', '--instance-number', help='Instance number', required=True)
@@ -70,6 +78,32 @@ def main(instance_number, container_file):
     # this is the name recognized by DNS in Google
     target = f'{instance_name}.{c.gcp.zone}.c.{c.gcp.project}.internal'
 
+    try_ssh = get_ssh()
+    try_ssh_timeout = try_ssh_timeout_c = 40
+
+    while try_ssh_timeout_c > 0:
+        try:
+            try_ssh.connect(
+                    target,
+                    username=USER,
+                    password=USER,
+                    timeout=1,
+                    auth_timeout=1,
+                    banner_timeout=1,
+            )
+            print('SSH is operational!')
+            try_ssh.close()
+            break
+        except Exception as e:
+            print('[{}/{}] Waiting for SSH...'.format(try_ssh_timeout_c, try_ssh_timeout))
+            try_ssh_timeout_c -= 1
+
+            if try_ssh_timeout_c == 0:
+                print('Timeout while waiting for SSH!')
+                sys.exit(1)
+
+            time.sleep(1)
+
     # scp public key to authorized_keys of the minion machine
     try:
         result = subprocess.check_output(
@@ -82,9 +116,7 @@ def main(instance_number, container_file):
         print('Failed to copy public ssh key to authorized_keys of the runner:')
         print(err)
 
-    ssh = paramiko.SSHClient()
-    ssh.get_host_keys()
-    ssh.set_missing_host_key_policy(paramiko.client.AutoAddPolicy())
+    ssh = get_ssh()
     ssh.connect(target, username='scalerunner')
 
     sif_location = '/mnt/container.sif'
@@ -109,7 +141,7 @@ def main(instance_number, container_file):
             print(l.strip())
 
         for l in stderr_lines:
-            print(l.strip(), file=sys.stderr)
+            print(l.strip())
 
 if __name__ == '__main__':
     main()
