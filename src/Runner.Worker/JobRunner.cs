@@ -120,7 +120,7 @@ namespace GitHub.Runner.Worker
                 spawnMachineProc.StartInfo.RedirectStandardOutput = true;
 
                 sshfsProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-                sshfsProc.StartInfo.Arguments = $"sshfs.sh {instanceNumber} {WorkspaceDirectory}";
+                sshfsProc.StartInfo.Arguments = $"sshfs.sh mount {instanceNumber} {WorkspaceDirectory}";
                 sshfsProc.StartInfo.WorkingDirectory = virtDir;
                 sshfsProc.StartInfo.UseShellExecute = false;
                 sshfsProc.StartInfo.RedirectStandardError = true;
@@ -313,31 +313,7 @@ namespace GitHub.Runner.Worker
                 {
                     Trace.Info("Finalize job.");
 
-                    var umountProc = new Process();
-                    umountProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-                    umountProc.StartInfo.Arguments = $"-e sshfs.sh {instanceNumber} {WorkspaceDirectory}";
-                    umountProc.StartInfo.WorkingDirectory = virtDir;
-                    umountProc.StartInfo.UseShellExecute = false;
-                    umountProc.StartInfo.RedirectStandardError = true;
-                    umountProc.StartInfo.RedirectStandardOutput = true;
-                    
-
-                    var gZone = vmSpecs.gcp.zone;
-                    var gcloudDelProc = new Process();
-                    gcloudDelProc.StartInfo.FileName = WhichUtil.Which("gcloud", trace: Trace);
-                    gcloudDelProc.StartInfo.Arguments = $"compute instances delete --delete-disks=boot --zone={gZone} {virtIp}";
-                    gcloudDelProc.StartInfo.WorkingDirectory = virtDir;
-                    gcloudDelProc.StartInfo.UseShellExecute = false;
-
-                    Trace.Info($"Unmouting sshfs from {WorkspaceDirectory}");
-                    umountProc.Start();
-                    umountProc.WaitForExit();
-
-                    Trace.Info($"Destroying {virtIp} from {gZone}");
-
-                    gcloudDelProc.Start();
-                    gcloudDelProc.WaitForExit();
-
+                    FinalizeGcp(jobContext, message, vmSpecs);
 
                     jobExtension.FinalizeJob(jobContext, message, jobStartTimeUtc);
                 }
@@ -368,7 +344,7 @@ namespace GitHub.Runner.Worker
             var umountProc = new Process();
 
             umountProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-            umountProc.StartInfo.Arguments = $"-e sshfs.sh {instanceNumber} {WorkspaceDirectory}";
+            umountProc.StartInfo.Arguments = $"-e sshfs.sh umount {instanceNumber} {WorkspaceDirectory}";
             umountProc.StartInfo.WorkingDirectory = virtDir;
             umountProc.StartInfo.UseShellExecute = false;
             umountProc.StartInfo.RedirectStandardError = true;
