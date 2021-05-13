@@ -39,3 +39,4 @@ test/misc/*
 !test/misc/.gitkeep
 
 **/*.swp
+__pycache__/
