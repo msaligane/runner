@@ -35,6 +35,7 @@ def main(instance_number, container_file):
     print(f'Spawning a GCP machine in {c.gcp.zone}...')
     print(f'Instance name:\t {instance_name}')
     print(f'Instance type:\t {c.gcp.type}')
+    print(f'Disk type:\t {c.gcp.disk_type}')
 
     key = (open('/home/runner/.ssh/id_rsa.pub')
           .read()
@@ -60,7 +61,7 @@ def main(instance_number, container_file):
                 '--no-scopes '
                 f'--image={c.gcp.image} --image-project={c.gcp.project} '
                 f'--boot-disk-size={overlay_size_gb}GB '
-                '--boot-disk-type=pd-balanced '
+                f'--boot-disk-type={c.gcp.disk_type} '
                 f'--boot-disk-device-name={instance_name} '
                 '--reservation-affinity=any',
                 shell=True,
@@ -92,6 +93,17 @@ def main(instance_number, container_file):
                     banner_timeout=1,
             )
             print('SSH is operational!')
+
+            _, stdout, stderr = try_ssh.exec_command('sudo chown -R {0}:{0} /home/{0}'.format(USER))
+            stdout_lines = stdout.readlines()
+            stderr_lines = stderr.readlines()
+
+            for l in stdout_lines:
+                print(l.strip())
+
+            for l in stderr_lines:
+                print(l.strip())
+
             try_ssh.close()
             break
         except Exception as e:
