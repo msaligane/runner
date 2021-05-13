@@ -1,10 +1,12 @@
 #!/usr/bin/python3
-import sys, subprocess, json, click, paramiko, time, functools
+import os, sys, subprocess, json, click, paramiko, time, functools
 from collections import namedtuple
 
 print = functools.partial(print, flush=True)
 
 USER = 'scalerunner'
+PUBKEY = os.path.join(os.path.expanduser('~'), '.ssh/id_rsa.pub'), f'/home/{USER}/.ssh/authorized_keys'
+SARGRAPH = os.path.realpath('../sargraph/sargraph.py'), f'/home/{USER}/sargraph.py'
 
 def load_config():
     with open('../.vm_specs.json', 'r') as f:
@@ -12,12 +14,6 @@ def load_config():
 
 def elapsed(start):
     return round(time.time() - start, 2)
-
-def get_ssh():
-    ssh = paramiko.SSHClient()
-    ssh.get_host_keys()
-    ssh.set_missing_host_key_policy(paramiko.client.AutoAddPolicy())
-    return ssh
 
 @click.command()
 @click.option('-n', '--instance-number', help='Instance number', required=True)
@@ -79,12 +75,14 @@ def main(instance_number, container_file):
     # this is the name recognized by DNS in Google
     target = f'{instance_name}.{c.gcp.zone}.c.{c.gcp.project}.internal'
 
-    try_ssh = get_ssh()
-    try_ssh_timeout = try_ssh_timeout_c = 40
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.client.AutoAddPolicy())
 
-    while try_ssh_timeout_c > 0:
+    ssh_timeout = ssh_timeout_c = 40
+
+    while ssh_timeout_c > 0:
         try:
-            try_ssh.connect(
+            ssh.connect(
                     target,
                     username=USER,
                     password=USER,
@@ -94,7 +92,7 @@ def main(instance_number, container_file):
             )
             print('SSH is operational!')
 
-            _, stdout, stderr = try_ssh.exec_command('sudo chown -R {0}:{0} /home/{0}'.format(USER))
+            _, stdout, stderr = ssh.exec_command('sudo chown -R {0}:{0} /home/{0}'.format(USER))
             stdout_lines = stdout.readlines()
             stderr_lines = stderr.readlines()
 
@@ -104,43 +102,39 @@ def main(instance_number, container_file):
             for l in stderr_lines:
                 print(l.strip())
 
-            try_ssh.close()
             break
         except Exception as e:
-            print('[{}/{}] Waiting for SSH...'.format(try_ssh_timeout_c, try_ssh_timeout))
-            try_ssh_timeout_c -= 1
+            print('[{}/{}] Waiting for SSH...'.format(ssh_timeout_c, ssh_timeout))
+            ssh_timeout_c -= 1
 
-            if try_ssh_timeout_c == 0:
+            if ssh_timeout_c == 0:
                 print('Timeout while waiting for SSH!')
+                print(e)
                 sys.exit(1)
 
             time.sleep(1)
 
-    # scp public key to authorized_keys of the minion machine
     try:
-        result = subprocess.check_output(
-                'sshpass -p scalerunner scp -q '
-                '-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no '
-                f'~/.ssh/id_rsa.pub scalerunner@{target}:~/.ssh/authorized_keys ',
-                shell=True
-        )
-    except subprocess.CalledProcessError as err:
-        print('Failed to copy public ssh key to authorized_keys of the runner:')
-        print(err)
-
-    ssh = get_ssh()
-    ssh.connect(target, username='scalerunner')
+        ssh_sftp = ssh.open_sftp()
+        ssh_sftp.put(*PUBKEY)
+        ssh_sftp.put(*SARGRAPH)
+    except Exception as e:
+        print('Copying initialization files failed!')
+        print(e)
+        sys.exit(1)
 
     sif_location = '/mnt/container.sif'
 
     commands = (
         'uname -a',
-        'sudo mkdir -p /mnt/1 /mnt/2/work /mnt/3',
+        'sudo mkdir -p /mnt/1 /mnt/2/work',
         f'echo "Pulling {container_file}..."',
 	    f'sudo singularity pull {sif_location} docker://{container_file}',
         f'sudo singularity instance start -C -e --dns 8.8.8.8 --overlay /mnt/1 --bind /mnt/2:/root {sif_location} i',
-        'sudo iptables -A OUTPUT -d 169.254.169.254 -j DROP'
-        #'SARGRAPH_OUTPUT_TYPE=svg sargraph chart start',
+        'sudo iptables -A OUTPUT -d 169.254.169.254 -j DROP',
+        f'chmod +x {SARGRAPH[1]}',
+        f'sudo mv {SARGRAPH[1]} /usr/bin/sargraph',
+        'SARGRAPH_OUTPUT_TYPE=svg sargraph chart start',
     )
 
     for cmd in commands:
