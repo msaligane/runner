@@ -97,10 +97,11 @@ namespace GitHub.Runner.Worker.Handlers
                 var virtDir = Path.Combine(new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName, "virt");
 
                 var tempDir = HostContext.GetDirectory(WellKnownDirectory.Temp);
+                var plotRemotePath = "/mnt/plot.svg";
 
                 var sargraphStop = new Process();
                 sargraphStop.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-                sargraphStop.StartInfo.Arguments = $"ssh.sh {instanceNumber} --sargraph-stop";
+                sargraphStop.StartInfo.Arguments = $"ssh.sh {instanceNumber} --sargraph-stop {plotRemotePath}";
                 sargraphStop.StartInfo.WorkingDirectory = virtDir;
                 sargraphStop.StartInfo.UseShellExecute = false;
                 sargraphStop.StartInfo.RedirectStandardError = true;
@@ -131,7 +132,16 @@ namespace GitHub.Runner.Worker.Handlers
                     Trace.Info("\n"+o.ReadToEnd()+"\n");
                 }
 
-                var plotFile = Path.Combine(tempDir, "_runner_file_commands", "plot.svg");
+                var plotGet = new Process();
+                var runnerFileCommands = Path.Combine(tempDir, "_runner_file_commands");
+
+                plotGet.StartInfo.FileName = WhichUtil.Which("scp", trace: Trace);
+                plotGet.StartInfo.Arguments = $"-q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ~/.ssh/id_rsa.pub scalerunner@auto-spawned{instanceNumber}:{plotRemotePath} {runnerFileCommands}";
+                plotGet.StartInfo.WorkingDirectory = virtDir;
+                plotGet.StartInfo.UseShellExecute = false;
+                plotGet.StartInfo.RedirectStandardError = true;
+                plotGet.StartInfo.RedirectStandardOutput = true;
+
 
                 symFix.WaitForExit();
                 sargraphStop.WaitForExit();
@@ -141,7 +151,25 @@ namespace GitHub.Runner.Worker.Handlers
 
                 if (sargraphStop.ExitCode == 0)
                 {
-                    File.Copy(plotFile, Path.Combine(workingDirectory, $"plot_{jobName}.svg"));
+                    plotGet.Start();
+                    plotGet.WaitForExit();
+                    Trace.Info($"{plotGet.StartInfo.Arguments} exit code: {plotGet.ExitCode}");
+
+                    Trace.Info($"{plotGet.StartInfo.Arguments} stdout:");
+                    using (StreamReader o = plotGet.StandardOutput)
+                    {
+                        Trace.Info(o.ReadToEnd());
+                    }
+
+                    Trace.Info($"{plotGet.StartInfo.Arguments} stderr:");
+                    using (StreamReader o = plotGet.StandardError)
+                    {
+                        Trace.Info(o.ReadToEnd());
+                    }
+
+                    File.Copy(
+                            Path.Combine(runnerFileCommands, "plot.svg"),
+                            Path.Combine(workingDirectory, $"plot_{jobName}.svg"));
                 }
             }
 

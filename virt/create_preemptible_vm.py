@@ -68,7 +68,7 @@ def main(instance_number, container_file):
 
     except subprocess.CalledProcessError as err:
         print('\n'+err.output.decode().replace(c.gcp.project, '***'))
-        exit()
+        sys.exit(1)
 
     print(f'Machine spawned in {elapsed(gcloud_start)} seconds.')
     
@@ -134,7 +134,7 @@ def main(instance_number, container_file):
         'sudo iptables -A OUTPUT -d 169.254.169.254 -j DROP',
         f'chmod +x {SARGRAPH[1]}',
         f'sudo mv {SARGRAPH[1]} /usr/bin/sargraph',
-        'SARGRAPH_OUTPUT_TYPE=svg sargraph chart start',
+        'cd /mnt && SARGRAPH_OUTPUT_TYPE=svg sudo -E sargraph chart start',
     )
 
     for cmd in commands:
