@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using System.Text;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using GitHub.Runner.Common;
@@ -132,11 +133,19 @@ namespace GitHub.Runner.Worker.Handlers
                     Trace.Info("\n"+o.ReadToEnd()+"\n");
                 }
 
-                var plotGet = new Process();
                 var runnerFileCommands = Path.Combine(tempDir, "_runner_file_commands");
 
+                var plotGet = new Process();
+                var plotGetArgs = new List<string> {"-q",
+                    "-o UserKnownHostsFile=/dev/null", 
+                    "-o StrictHostKeyChecking=no",
+                    "~/.ssh/id_rsa.pub",
+                    $"scalerunner@auto-spawned{instanceNumber}:{plotRemotePath}",
+                    $"{runnerFileCommands}"
+                };
+
                 plotGet.StartInfo.FileName = WhichUtil.Which("scp", trace: Trace);
-                plotGet.StartInfo.Arguments = $"-q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ~/.ssh/id_rsa.pub scalerunner@auto-spawned{instanceNumber}:{plotRemotePath} {runnerFileCommands}";
+                plotGet.StartInfo.Arguments = string.Join(" ", plotGetArgs);
                 plotGet.StartInfo.WorkingDirectory = virtDir;
                 plotGet.StartInfo.UseShellExecute = false;
                 plotGet.StartInfo.RedirectStandardError = true;
