@@ -124,13 +124,14 @@ def main(instance_number, container_file):
         sys.exit(1)
 
     sif_location = '/mnt/container.sif'
+    infer_dns_cmd = "$(echo $SSH_CONNECTION | awk '{ print $1 }')"
 
     commands = (
         'uname -a',
         'sudo mkdir -p /mnt/1 /mnt/2/work',
         f'echo "Pulling {container_file}..."',
 	    f'sudo singularity pull {sif_location} docker://{container_file}',
-        f'sudo singularity instance start -C -e --dns 8.8.8.8 --overlay /mnt/1 --bind /mnt/2:/root {sif_location} i',
+        f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root {sif_location} i',
         'sudo iptables -A OUTPUT -d 169.254.169.254 -j DROP',
         f'chmod +x {SARGRAPH[1]}',
         f'sudo mv {SARGRAPH[1]} /usr/bin/sargraph',
