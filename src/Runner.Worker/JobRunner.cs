@@ -52,7 +52,7 @@ namespace GitHub.Runner.Worker
             var rootDir = new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName;
             var virtDir = Path.Combine(rootDir, "virt");
             var ghJson = message.ContextData["github"].ToJToken();
-            string virtIp = $"auto-spawned{instanceNumber}";
+            string virtIp = $"{Environment.MachineName}-auto-spawned{instanceNumber}";
 
             Trace.Info($"Runner instance: {instanceNumber}");
 

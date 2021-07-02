@@ -1,6 +1,7 @@
 #!/bin/bash
 
-IP=auto-spawned$1
+IP_PREFIX=`hostname`
+IP=$IP_PREFIX-auto-spawned$1
 
 echo "Connecting to $IP"
 

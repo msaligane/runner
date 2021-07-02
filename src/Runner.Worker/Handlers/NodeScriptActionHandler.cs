@@ -140,7 +140,7 @@ namespace GitHub.Runner.Worker.Handlers
                     "-o UserKnownHostsFile=/dev/null", 
                     "-o StrictHostKeyChecking=no",
                     "~/.ssh/id_rsa.pub",
-                    $"scalerunner@auto-spawned{instanceNumber}:{plotRemotePath}",
+                    $"scalerunner@{System.Environment.MachineName}-auto-spawned{instanceNumber}:{plotRemotePath}",
                     $"{runnerFileCommands}"
                 };
 

@@ -16,7 +16,8 @@ if [ "$#" -ne 3 ]; then
     help
 fi
 
-IP=auto-spawned$2
+IP_PREFIX=`hostname`
+IP=$IP_PREFIX-auto-spawned$2
 SHARE_PATH=$(realpath ../_layout)/_work_$2/$3
 REMOTE_PATH="scalerunner@$IP:/mnt/2/work"
 

@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import os, sys, subprocess, json, click, paramiko, time, functools
+import os, sys, subprocess, json, click, paramiko, time, functools, platform
 from collections import namedtuple
 
 print = functools.partial(print, flush=True)
@@ -26,7 +26,7 @@ def main(instance_number, container_file):
 
     project_id = c.gcp.project
     zone = c.gcp.zone
-    instance_name = f'auto-spawned{instance_number}'
+    instance_name = f'{platform.node()}-auto-spawned{instance_number}'
 
     print(f'Spawning a GCP machine in {c.gcp.zone}...')
     print(f'Instance name:\t {instance_name}')

@@ -5,13 +5,14 @@ set -e
 cd $(dirname $0)
 
 PREFIX=$1
+IP_PREFIX=`hostname`
 
 sshSend() {
     echo "+ $@"
     /usr/bin/ssh -q \
         -o "UserKnownHostsFile /dev/null" \
         -o "StrictHostKeyChecking no" \
-        scalerunner@auto-spawned$PREFIX << EOF
+        scalerunner@$IP_PREFIX-auto-spawned$PREFIX << EOF
 sudo -s
 $@
 EOF
