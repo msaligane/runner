@@ -12,6 +12,7 @@ sshSend() {
     /usr/bin/ssh -q \
         -o "UserKnownHostsFile /dev/null" \
         -o "StrictHostKeyChecking no" \
+        -o "ServerAliveInterval 10" \
         scalerunner@$IP_PREFIX-auto-spawned$PREFIX << EOF
 sudo -s
 $@
