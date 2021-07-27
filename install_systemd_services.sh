@@ -9,25 +9,7 @@ if [ `whoami` != 'root' ]; then
     exit 1
 fi
 
-TAP_PATH=$PWD/virt/tap.sh
-DESC="GitHub Actions QEMU runner"
-
-read -r -d '\0' NET_SYSTEMD_UNIT << EOM
-[Unit]
-Description=$DESC - network helper
-AssertPathExists=$PWD/virt
-Wants=network-online.target
-After=network-online.target
-
-[Service]
-WorkingDirectory=$PWD
-ExecStart=$TAP_PATH %i
-KillMode=process
-
-[Install]
-WantedBy=multi-user.target
-\0
-EOM
+DESC="GitHub Actions GCP runner"
 
 read -r -d '\0' MAIN_SYSTEMD_UNIT << EOM
 [Unit]
@@ -49,6 +31,5 @@ WantedBy=multi-user.target
 EOM
 
 echo "$MAIN_SYSTEMD_UNIT" > /lib/systemd/system/gha-main@.service
-echo "$NET_SYSTEMD_UNIT" > /lib/systemd/system/gha-taps@.service
 
 systemctl daemon-reload
