@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-## 6dea9d1
+## 0386acd
 
 update-alternatives --install /usr/bin/python python /usr/bin/python3
 apt -y install git
@@ -14,7 +14,7 @@ sudo -u runner bash -c "cd /home/runner&&cat /dev/zero | ssh-keygen -q -N '' || 
 sudo -u runner git clone https://github.com/antmicro/runner.git -b vm-runners /home/runner/github-actions-runner
 apt -y install htop iotop psmisc sshfs supervisor tmux vim rsync util-linux netcat-openbsd openssh-client python3-requests python3-click python3-paramiko unbound libicu-dev ncurses-term
 systemctl stop unbound
-systemctl enable unbound
+systemctl disable unbound
 sudo -u runner bash -c "cd /home/runner/github-actions-runner&&sudo ./install_systemd_services.sh"
 ln -s /etc/apparmor.d/usr.sbin.unbound /etc/apparmor.d/disable/usr.sbin.unbound
 bash -c "apparmor_parser -R /etc/apparmor.d/usr.sbin.unbound"
