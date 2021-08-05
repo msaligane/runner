@@ -19,7 +19,7 @@
             <BuildConstants Include="%20%20%20%20%20%20%20%20public static class RunnerPackage"/>
             <BuildConstants Include="%20%20%20%20%20%20%20%20{"/>
             <BuildConstants Include="%20%20%20%20%20%20%20%20%20%20%20%20public static readonly string PackageName = %22$(PackageRuntime)%22%3B"/>
-            <BuildConstants Include="%20%20%20%20%20%20%20%20%20%20%20%20public static readonly string Version = %22$(RunnerVersion)%22%3B"/>
+            <BuildConstants Include="%20%20%20%20%20%20%20%20%20%20%20%20public static string Version { get => VersionProvider.getVersion()%3B}"/>
             <BuildConstants Include="%20%20%20%20%20%20%20%20}"/>
             <BuildConstants Include="%20%20%20%20}"/>
             <BuildConstants Include="}"/>
