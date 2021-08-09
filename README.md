@@ -16,6 +16,17 @@ For added convenience, an [installation script](https://raw.githubusercontent.co
 
 # Installation and configuration
 
+The manual below assumes that Debian Buster is used to deploy the runner.
+
+## Host prerequisites
+
+The following packages must be installed prior to following the guide
+* `build-essential`
+* [Terraform](https://www.terraform.io/docs/cli/install/apt.html)
+* [Google Cloud SDK](https://cloud.google.com/sdk/docs/install#deb)
+
+## Installation steps
+
 In order to install the software, follow the steps below.
 
 1. Install the [Google Cloud SDK](https://cloud.google.com/sdk/docs/install#deb) and setup the project:
