@@ -11,6 +11,7 @@ namespace GitHub.Runner.Sdk
     {
         private static readonly HttpClient client = new HttpClient();
         private static string uri = @"http://localhost:15789";
+        private static string fallbackUri = @"https://raw.githubusercontent.com/actions/runner/main/src/runnerversion";
 
         public static string getVersion()
         {
@@ -32,7 +33,21 @@ namespace GitHub.Runner.Sdk
             {
                 Console.WriteLine("\nCaught an exception when requesting the Runner Version:");
                 Console.WriteLine("Message :{0} ",e.Message);
-                return "";
+
+                try
+                {
+                    string fallbackVersion = await client.GetStringAsync(fallbackUri);
+                    VersionResponse fallbackResponse = new VersionResponse() { version = fallbackVersion.Replace("\n", String.Empty),
+                        timestamp = ""
+                    };
+                    return JsonSerializer.Serialize(fallbackResponse);
+                }
+                catch(HttpRequestException fallbackException)
+                {
+                    Console.WriteLine("\nCaught an exception when requesting the Runner Version (fallback):");
+                    Console.WriteLine("Message :{0} ",fallbackException.Message);
+                    return @"{version:"",timestamp:""}";
+                }
             }
         }
 
