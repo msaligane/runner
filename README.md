@@ -18,24 +18,82 @@ For added convenience, an [installation script](https://raw.githubusercontent.co
 
 In order to install the software, follow the steps below.
 
-1. Create a GCP project for your runner and create a service account with scopes described in [Terraform module README](https://raw.githubusercontent.com/antmicro/github-actions-runner-terraform/main/README.md).
-1. Install the [Google Cloud SDK](https://cloud.google.com/sdk/docs/install#deb).
-1. Create a GCP bucket for worker image by running `gsutil mb gs://$bucket_name`.
-1. Run `git clone https://github.com/antmicro/github-actions-runner-scalerunner.git` and change directory into the repository.
-1. Build the image by running `cd buildroot && make BR2_EXTERNAL=../overlay/ scalenode_gcp_defconfig && make`.
-1. Prepare a disk for GCP by running `./make_gcp_image.sh`.
-1. Upload the disk by running `./upload_gcp_image.sh $gcp_project_name $bucket_name`.
-1. Generate and download a key file for the SA and set the `GOOGLE_APPLICATION_CREDENTIALS` environment variable to the path of the service account key.
-1. Install [Terraform](https://learn.hashicorp.com/tutorials/terraform/install-cli).
-1. Run `git clone https://github.com/antmicro/github-actions-runner-terraform.git`.
-1. Enter the freshly cloned repository and run `terraform init && terraform apply`.
-1. An interactive prompt will ask you for the infrastructure settings.
-1. Once the infrastructure has been provisioned, SSH into the newly created coordinator instance by running `gcloud compute ssh $gcp_coordinator_name`.
-1. Download an run the installation script by issuing `wget https://raw.githubusercontent.com/antmicro/runner/vm-runners/scripts/install.sh | bash`. The script will clone the [runner repository](https://github.com/antmicro/runner), setup the `runner` user and install dependencies.
-1. Change working directory into the runner repository.
-1. Copy the `.vm_specs.example.json` to `.vm_specs.json` and adjust the parameters accordingly.
-1. Register the runner in a repository by running `./config.sh --url https://github.com/$REPOSITORY_ORG/$REPOSITORY_NAME --token $TOKEN --num $SLOTS` with `$TOKEN` being the registration token found in the **Actions** tab in the repository settings and `$SLOTS` being the number of runner slots to allocate.
-1. Start the runner using one of the methods described below.
+1. Install the [Google Cloud SDK](https://cloud.google.com/sdk/docs/install#deb) and setup the project:
+    ```bash
+    # Authenticate with GCP.
+    gcloud auth login
+    
+    # Create a GCP project for your runner.
+    export PROJECT=example-runner-project
+    gcloud projects create $PROJECT
+    gcloud config set $PROJECT
+    
+    # Create and setup a service account.
+    export SERVICE_ACCOUNT_ID=runner-manager
+    gcloud iam service-accounts create $SERVICE_ACCOUNT_ID
+    
+    gcloud projects add-iam-policy-binding $PROJECT \
+        --member="serviceAccount:$SERVICE_ACCOUNT_ID@$PROJECT \
+        --role="roles/compute.admin"
+    
+    gcloud projects add-iam-policy-binding $PROJECT \
+        --member="serviceAccount:$SERVICE_ACCOUNT_ID@$PROJECT \
+        --role="roles/iam.serviceAccountCreator"
+    
+    gcloud projects add-iam-policy-binding $PROJECT \
+        --member="serviceAccount:$SERVICE_ACCOUNT_ID@$PROJECT \
+        --role="roles/iam.serviceAccountUser"
+
+    # Create and download SA key.
+    # WARNING: the export below will be used by Terraform later.
+    export GOOGLE_APPLICATION_CREDENTIALS
+    gcloud iam service-accounts keys create $GOOGLE_APPLICATION_CREDENTIALS \
+        --iam-account=$SERVICE_ACCOUNT_ID@$PROJECT
+
+    # Create a GCP bucket for worker image.
+    export BUCKET=$PROJECT-worker-bucket
+    gsutil mb gs://$BUCKET
+    ```
+1. Build and upload the worker image:
+    ```bash
+    # Clone the repository
+    git clone https://github.com/antmicro/github-actions-runner-scalerunner.git
+    cd github-actions-runner-scalerunner
+    
+    # Compile bzImage
+    cd buildroot && make BR2_EXTERNAL=../overlay/ scalenode_gcp_defconfig && make
+    
+    # Prepare a disk for GCP
+    ./make_gcp_image.sh
+    
+    # Upload the resulting tar archive
+    ./upload_gcp_image.sh $PROJECT $BUCKET
+    ```
+1. Setup virtual infrastructure using Terraform:
+    ```bash
+    git clone https://github.com/antmicro/github-actions-runner-terraform.git
+    terraform init && terraform apply
+    ```
+1. Connect to the coordinator instance created in the previous step.
+    ```bash
+    gcloud compute --zone <COORDINATOR_ZONE> ssh <COORDINATOR_INSTANCE>
+    ```
+1. Install and configure the runner on the coordinator instance:
+    ```bash
+    # Download and run the installation script.
+    wget https://raw.githubusercontent.com/antmicro/runner/vm-runners/scripts/install.sh | bash
+    
+    # The runner software runs as the 'runner' user, so let's sudo into it.
+    sudo -i -u runner
+    cd /home/runner/github-actions-runner
+    
+    # Copy the .vm_specs.json file and adjust the parameters accordingly.
+    cp .vm_specs.example.json .vm_specs.json
+    vim .vm_specs.json
+    
+    # Register the runner in the desired repository.
+    ./config.sh --url https://github.com/$REPOSITORY_ORG/$REPOSITORY_NAME --token $TOKEN --num $SLOTS
+    ```
 
 ## Starting the runner
 
