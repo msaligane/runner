@@ -31,7 +31,7 @@ In order to install the software, follow the steps below.
 1. Enter the freshly cloned repository and run `terraform init && terraform apply`.
 1. An interactive prompt will ask you for the infrastructure settings.
 1. Once the infrastructure has been provisioned, SSH into the newly created coordinator instance by running `gcloud compute ssh $gcp_coordinator_name`.
-1. Fetch the [installation script](https://raw.githubusercontent.com/antmicro/runner/vm-runners/scripts/install.sh) and run it on the coordinator. The script will clone the [runner repository](https://github.com/antmicro/runner), setup the `runner` user and install dependencies.
+1. Download an run the installation script by issuing `wget https://raw.githubusercontent.com/antmicro/runner/vm-runners/scripts/install.sh | bash`. The script will clone the [runner repository](https://github.com/antmicro/runner), setup the `runner` user and install dependencies.
 1. Change working directory into the runner repository.
 1. Copy the `.vm_specs.example.json` to `.vm_specs.json` and adjust the parameters accordingly.
 1. Register the runner in a repository by running `./config.sh --url https://github.com/$REPOSITORY_ORG/$REPOSITORY_NAME --token $TOKEN --num $SLOTS` with `$TOKEN` being the registration token found in the **Actions** tab in the repository settings and `$SLOTS` being the number of runner slots to allocate.
