@@ -21,7 +21,6 @@ def update_rv():
     logging.info("Started update_rv")
 
     while True:
-        time.sleep(10)
         try:
             r = requests.get(RV_URL)
             r.raise_for_status()
@@ -33,6 +32,7 @@ def update_rv():
                     logging.info(f"New RV: {RV}")
         except Exception as e:
             logging.info(f"Exception occured: {str(e)}")
+        time.sleep(10)
 
     logging.info("Stopped update_rv")
             
