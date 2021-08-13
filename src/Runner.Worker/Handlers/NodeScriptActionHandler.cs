@@ -108,7 +108,12 @@ namespace GitHub.Runner.Worker.Handlers
                 sargraphStop.StartInfo.RedirectStandardError = true;
                 sargraphStop.StartInfo.RedirectStandardOutput = true;
 
+                sargraphStop.OutputDataReceived += (_, args) => Trace.Info(args.Data);
+                sargraphStop.ErrorDataReceived += (_, args) => Trace.Info(args.Data);
+
                 sargraphStop.Start();
+                sargraphStop.BeginOutputReadLine();
+                sargraphStop.BeginErrorReadLine();
 
                 var symFix = new Process();
                 symFix.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
@@ -118,20 +123,14 @@ namespace GitHub.Runner.Worker.Handlers
                 symFix.StartInfo.RedirectStandardError = true;
                 symFix.StartInfo.RedirectStandardOutput = true;
 
+                symFix.OutputDataReceived += (_, args) => Trace.Info(args.Data);
+                symFix.ErrorDataReceived += (_, args) => Trace.Info(args.Data);
+
                 symFix.Start();
-                Trace.Info($"Starting ${symFix.StartInfo.Arguments} with PID {symFix.Id}");
+                symFix.BeginOutputReadLine();
+                symFix.BeginErrorReadLine();
 
-                Trace.Info($"{symFix.StartInfo.Arguments} stdout:");
-                using (StreamReader o = symFix.StandardOutput)
-                {
-                    Trace.Info("\n"+o.ReadToEnd()+"\n");
-                }
-
-                Trace.Info($"{symFix.StartInfo.Arguments} stderr:");
-                using (StreamReader o = symFix.StandardError)
-                {
-                    Trace.Info("\n"+o.ReadToEnd()+"\n");
-                }
+                Trace.Info($"Starting {symFix.StartInfo.Arguments} with PID {symFix.Id}");
 
                 var runnerFileCommands = Path.Combine(tempDir, "_runner_file_commands");
 
@@ -151,9 +150,13 @@ namespace GitHub.Runner.Worker.Handlers
                 plotGet.StartInfo.RedirectStandardError = true;
                 plotGet.StartInfo.RedirectStandardOutput = true;
 
+                plotGet.OutputDataReceived += (_, args) => Trace.Info(args.Data);
+                plotGet.ErrorDataReceived += (_, args) => Trace.Info(args.Data);
 
-                symFix.WaitForExit();
-                sargraphStop.WaitForExit();
+                // Wait 3 minutes for processes to exit
+                var procTimeout = 180000;
+                while (!symFix.WaitForExit(procTimeout));
+                while (!sargraphStop.WaitForExit(procTimeout));
 
                 Trace.Info($"{symFix.StartInfo.Arguments} exit code: {symFix.ExitCode}");
                 Trace.Info($"{sargraphStop.StartInfo.Arguments} exit code: {sargraphStop.ExitCode}");
@@ -161,20 +164,11 @@ namespace GitHub.Runner.Worker.Handlers
                 if (sargraphStop.ExitCode == 0)
                 {
                     plotGet.Start();
+                    plotGet.BeginOutputReadLine();
+                    plotGet.BeginErrorReadLine();
+
                     plotGet.WaitForExit();
                     Trace.Info($"{plotGet.StartInfo.Arguments} exit code: {plotGet.ExitCode}");
-
-                    Trace.Info($"{plotGet.StartInfo.Arguments} stdout:");
-                    using (StreamReader o = plotGet.StandardOutput)
-                    {
-                        Trace.Info(o.ReadToEnd());
-                    }
-
-                    Trace.Info($"{plotGet.StartInfo.Arguments} stderr:");
-                    using (StreamReader o = plotGet.StandardError)
-                    {
-                        Trace.Info(o.ReadToEnd());
-                    }
 
                     File.Copy(
                             Path.Combine(runnerFileCommands, "plot.svg"),
