@@ -138,7 +138,7 @@ namespace GitHub.Runner.Worker.Handlers
                 var plotGetArgs = new List<string> {"-q",
                     "-o UserKnownHostsFile=/dev/null", 
                     "-o StrictHostKeyChecking=no",
-                    "~/.ssh/id_rsa.pub",
+                    "-i ~/.ssh/id_rsa",
                     $"scalerunner@{System.Environment.MachineName}-auto-spawned{instanceNumber}:{plotRemotePath}",
                     $"{runnerFileCommands}"
                 };
