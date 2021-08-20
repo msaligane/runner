@@ -125,6 +125,14 @@ namespace GitHub.Runner.Worker
                 spawnMachineProc.StartInfo.RedirectStandardError = true;
                 spawnMachineProc.StartInfo.RedirectStandardOutput = true;
 
+                spawnMachineProc.OutputDataReceived += (_, args) => 
+                {
+                    vmCtx.Output(args.Data);
+                    Trace.Info(args.Data);
+                };
+                // Log stderr to local logfile only to avoid potential leaks.
+                spawnMachineProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data);
+
                 sshfsProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
                 sshfsProc.StartInfo.Arguments = $"sshfs.sh mount {instanceNumber} {WorkspaceDirectory}";
                 sshfsProc.StartInfo.WorkingDirectory = virtDir;
@@ -132,22 +140,18 @@ namespace GitHub.Runner.Worker
                 sshfsProc.StartInfo.RedirectStandardError = true;
                 sshfsProc.StartInfo.RedirectStandardOutput = true;
 
+                sshfsProc.OutputDataReceived += (_, args) => Trace.Info(args.Data);
+                sshfsProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data);
+
                 // Setup TEMP directories
                 _tempDirectoryManager = HostContext.GetService<ITempDirectoryManager>();
                 _tempDirectoryManager.InitializeTempDirectory(jobContext);
 
                 spawnMachineProc.Start();
-                Trace.Info($"Starting VM with start script PID {spawnMachineProc.Id}");
+                spawnMachineProc.BeginOutputReadLine();
+                spawnMachineProc.BeginErrorReadLine();
 
-                using (StreamReader vmOut = spawnMachineProc.StandardOutput)
-                {
-                    string line;
-                    while((line = vmOut.ReadLine()) != null)
-                    {
-                        vmCtx.Output(line);
-                        Trace.Info(line);
-                    }
-                }
+                Trace.Info($"Starting VM with start script PID {spawnMachineProc.Id}");
 
                 spawnMachineProc.WaitForExit();
                 Trace.Info("VM is ready.");
@@ -160,43 +164,21 @@ namespace GitHub.Runner.Worker
                     Trace.Info(vmNonZeroExitCode);
                     jobContext.Error(vmNonZeroExitCode);
 
-                    using (StreamReader vmErr = spawnMachineProc.StandardError)
-                    {
-                        string line;
-                        while((line = vmErr.ReadLine()) != null)
-                        {
-                            Trace.Info(line);
-                        }
-                    }
-
                     FinalizeGcp(jobContext, message, vmSpecs);
 
                     return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
                 }
 
-
-
                 Trace.Info($"Mounting {WorkspaceDirectory} via sshfs...");
                 sshfsProc.Start();
-
-                using (StreamReader sshfsOut = sshfsProc.StandardOutput)
-                {
-                    Trace.Info(sshfsOut.ReadToEnd());
-                }
-
+                sshfsProc.BeginOutputReadLine();
+                sshfsProc.BeginErrorReadLine();
                 sshfsProc.WaitForExit();
 
                 if (sshfsProc.ExitCode != 0)
                 {
-                    string sshfsError;
-                    using (StreamReader sshfsErr = sshfsProc.StandardError)
-                    {
-                        sshfsError = sshfsErr.ReadToEnd();
-                    }
-
                     Trace.Error($"sshfs started exited with {sshfsProc.ExitCode}");
-                    Trace.Error(sshfsError);
-                    jobContext.Error($"sshfs: exit code {sshfsProc.ExitCode}, err {sshfsError}");
+                    jobContext.Error($"sshfs: exit code {sshfsProc.ExitCode}");
 
                     FinalizeGcp(jobContext, message, vmSpecs);
 
@@ -349,6 +331,13 @@ namespace GitHub.Runner.Worker
             umountProc.StartInfo.RedirectStandardError = true;
             umountProc.StartInfo.RedirectStandardOutput = true;
 
+            umountProc.OutputDataReceived += (_, args) => Trace.Info(args.Data);
+            umountProc.ErrorDataReceived += (_, args) =>
+            {
+                Trace.Error(args.Data);
+                jobContext.Error(args.Data);
+            };
+
             var gZone = vmSpecs.gcp.zone;
             var gcloudDelProc = new Process();
             gcloudDelProc.StartInfo.FileName = WhichUtil.Which("gcloud", trace: Trace);
@@ -356,26 +345,21 @@ namespace GitHub.Runner.Worker
             gcloudDelProc.StartInfo.WorkingDirectory = virtDir;
             gcloudDelProc.StartInfo.UseShellExecute = false;
 
+            gcloudDelProc.OutputDataReceived += (_, args) => Trace.Info(args.Data);
+            gcloudDelProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data);
+
             Trace.Info($"Unmouting sshfs from {WorkspaceDirectory}");
             umountProc.Start();
+            umountProc.BeginOutputReadLine();
+            umountProc.BeginErrorReadLine();
             umountProc.WaitForExit();
 
             Trace.Info($"Destroying {virtIp} from {gZone}");
 
             gcloudDelProc.Start();
+            gcloudDelProc.BeginOutputReadLine();
+            gcloudDelProc.BeginErrorReadLine();
             gcloudDelProc.WaitForExit();
-
-            if (umountProc.ExitCode != 0)
-            {
-                string umountError;
-                using (StreamReader umountErr = umountProc.StandardError)
-                {
-                    umountError = umountErr.ReadToEnd();
-                }
-
-                Trace.Error(umountError);
-                jobContext.Error(umountError);
-            }
 
             return true;
         }
