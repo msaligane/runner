@@ -277,6 +277,10 @@ namespace GitHub.Runner.Worker
                     Trace.Error($"Caught exception from {nameof(jobExtension.InitializeJob)}: {ex}");
                     return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
                 }
+                finally
+                {
+                    FinalizeGcp(jobContext, message, vmSpecs);
+                }
 
                 // trace out all steps
                 Trace.Info($"Total job steps: {jobSteps.Count}.");
