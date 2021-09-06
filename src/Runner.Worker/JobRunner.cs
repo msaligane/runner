@@ -127,11 +127,11 @@ namespace GitHub.Runner.Worker
 
                 spawnMachineProc.OutputDataReceived += (_, args) => 
                 {
-                    vmCtx.Output(args.Data);
-                    Trace.Info(args.Data);
+                    vmCtx.Output(args.Data ?? "");
+                    Trace.Info(args.Data ?? "");
                 };
                 // Log stderr to local logfile only to avoid potential leaks.
-                spawnMachineProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data);
+                spawnMachineProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
 
                 sshfsProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
                 sshfsProc.StartInfo.Arguments = $"sshfs.sh mount {instanceNumber} {WorkspaceDirectory}";
@@ -140,8 +140,8 @@ namespace GitHub.Runner.Worker
                 sshfsProc.StartInfo.RedirectStandardError = true;
                 sshfsProc.StartInfo.RedirectStandardOutput = true;
 
-                sshfsProc.OutputDataReceived += (_, args) => Trace.Info(args.Data);
-                sshfsProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data);
+                sshfsProc.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
+                sshfsProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
 
                 // Setup TEMP directories
                 _tempDirectoryManager = HostContext.GetService<ITempDirectoryManager>();
@@ -154,25 +154,33 @@ namespace GitHub.Runner.Worker
                 Trace.Info($"Starting VM with start script PID {spawnMachineProc.Id}");
 
                 spawnMachineProc.WaitForExit();
-                Trace.Info("VM is ready.");
-                vmCtx.Complete();
 
                 if (spawnMachineProc.ExitCode != 0)
                 {
                     var vmNonZeroExitCode = $"VM starter exited with non-zero exit code: {spawnMachineProc.ExitCode}";
-                    vmCtx.Output(vmNonZeroExitCode);
-                    Trace.Info(vmNonZeroExitCode);
+
+                    vmCtx.Error(vmNonZeroExitCode);
+                    vmCtx.Result = TaskResult.Failed;
+
+                    Trace.Error(vmNonZeroExitCode);
                     jobContext.Error(vmNonZeroExitCode);
 
                     FinalizeGcp(jobContext, message, vmSpecs);
+
+                    Trace.Info("Finished finalizing GCP after VM starter failure.");
+
+                    vmCtx.Complete();
 
                     return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
                 }
 
                 Trace.Info($"Mounting {WorkspaceDirectory} via sshfs...");
+                vmCtx.Output("Mounting worker filesystem...");
+
                 sshfsProc.Start();
                 sshfsProc.BeginOutputReadLine();
                 sshfsProc.BeginErrorReadLine();
+                sshfsProc.WaitForExit(30000);
                 sshfsProc.WaitForExit();
 
                 if (sshfsProc.ExitCode != 0)
@@ -180,11 +188,17 @@ namespace GitHub.Runner.Worker
                     Trace.Error($"sshfs started exited with {sshfsProc.ExitCode}");
                     jobContext.Error($"sshfs: exit code {sshfsProc.ExitCode}");
 
+                    vmCtx.Error("Mounting worker filesystem failed!");
+                    vmCtx.Result = TaskResult.Failed;
+
                     FinalizeGcp(jobContext, message, vmSpecs);
+
+                    vmCtx.Complete();
 
                     return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
                 }
 
+                vmCtx.Complete();
 
                 jobContext.Debug($"Starting: {message.JobDisplayName}");
 
@@ -249,6 +263,9 @@ namespace GitHub.Runner.Worker
                     // don't log error issue to job ExecutionContext, since server owns the job level issue
                     Trace.Error($"Job is canceled during initialize.");
                     Trace.Error($"Caught exception: {ex}");
+
+                    FinalizeGcp(jobContext, message, vmSpecs);
+
                     return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Canceled);
                 }
                 catch (Exception ex)
@@ -257,11 +274,10 @@ namespace GitHub.Runner.Worker
                     // don't log error issue to job ExecutionContext, since server owns the job level issue
                     Trace.Error($"Job initialize failed.");
                     Trace.Error($"Caught exception from {nameof(jobExtension.InitializeJob)}: {ex}");
-                    return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
-                }
-                finally
-                {
+
                     FinalizeGcp(jobContext, message, vmSpecs);
+
+                    return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
                 }
 
                 // trace out all steps
@@ -331,11 +347,11 @@ namespace GitHub.Runner.Worker
             umountProc.StartInfo.RedirectStandardError = true;
             umountProc.StartInfo.RedirectStandardOutput = true;
 
-            umountProc.OutputDataReceived += (_, args) => Trace.Info(args.Data);
+            umountProc.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
             umountProc.ErrorDataReceived += (_, args) =>
             {
-                Trace.Error(args.Data);
-                jobContext.Error(args.Data);
+                Trace.Error(args.Data ?? "");
+                jobContext.Error(args.Data ?? "");
             };
 
             var gZone = vmSpecs.gcp.zone;
@@ -344,9 +360,11 @@ namespace GitHub.Runner.Worker
             gcloudDelProc.StartInfo.Arguments = $"compute instances delete --delete-disks=boot --zone={gZone} {virtIp}";
             gcloudDelProc.StartInfo.WorkingDirectory = virtDir;
             gcloudDelProc.StartInfo.UseShellExecute = false;
+            gcloudDelProc.StartInfo.RedirectStandardError = true;
+            gcloudDelProc.StartInfo.RedirectStandardOutput = true;
 
-            gcloudDelProc.OutputDataReceived += (_, args) => Trace.Info(args.Data);
-            gcloudDelProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data);
+            gcloudDelProc.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
+            gcloudDelProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
 
             Trace.Info($"Unmouting sshfs from {WorkspaceDirectory}");
             umountProc.Start();
