@@ -116,6 +116,13 @@ namespace GitHub.Runner.Worker
                 IExecutionContext vmCtx = jobContext.CreateChild(Guid.NewGuid(), "Set up VM", "VM_Init", null, null);
                 vmCtx.Start();
 
+                if (IsGcpMachineRunning(virtIp, vmSpecs))
+                {
+                    vmCtx.Output("Removing stale worker...");
+                    FinalizeGcp(jobContext, message, vmSpecs);
+                    vmCtx.Output("Stale worker removed.");
+                }
+
                 Trace.Info($"Container: ${container.Image}");
 
                 spawnMachineProc.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
@@ -333,7 +340,29 @@ namespace GitHub.Runner.Worker
             }
         }
 
-        private bool FinalizeGcp(IExecutionContext jobContext, Pipelines.AgentJobRequestMessage message, dynamic vmSpecs) {
+        private bool IsGcpMachineRunning(string hostname, dynamic vmSpecs)
+        {
+            Trace.Entering();
+
+            var zone = vmSpecs.gcp.zone;
+            var gcloud = new Process();
+            gcloud.StartInfo.FileName = WhichUtil.Which("gcloud", trace: Trace);
+            gcloud.StartInfo.Arguments = $"beta compute instances describe {hostname} --zone={zone} --quiet";
+            gcloud.StartInfo.UseShellExecute = false;
+            gcloud.StartInfo.RedirectStandardError = true;
+            gcloud.StartInfo.RedirectStandardOutput = true;
+
+            gcloud.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
+            gcloud.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
+
+            gcloud.Start();
+            gcloud.WaitForExit();
+
+            return gcloud.ExitCode == 0;
+        }
+
+        private bool FinalizeGcp(IExecutionContext jobContext, Pipelines.AgentJobRequestMessage message, dynamic vmSpecs)
+        {
             var instanceNumber = Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
             var virtIp = message.Variables["system.qemuIp"].Value;
             var virtDir = message.Variables["system.qemuDir"].Value;
