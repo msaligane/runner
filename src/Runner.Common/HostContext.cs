@@ -90,19 +90,19 @@ namespace GitHub.Runner.Common
             this.SecretMasker.AddValueEncoder(ValueEncoders.XmlDataEscape);
             this.SecretMasker.AddValueEncoder(ValueEncoders.TrimDoubleQuotes);
 
+            int logPageSize = 0, logRetentionDays = 0;
+            string logSizeEnv = Environment.GetEnvironmentVariable($"{hostType.ToUpperInvariant()}_LOGSIZE");
+            string logRetentionDaysEnv = Environment.GetEnvironmentVariable($"{hostType.ToUpperInvariant()}_LOGRETENTION");
+
             // Create the trace manager.
             if (string.IsNullOrEmpty(logFile))
             {
-                int logPageSize;
-                string logSizeEnv = Environment.GetEnvironmentVariable($"{hostType.ToUpperInvariant()}_LOGSIZE");
-                if (!string.IsNullOrEmpty(logSizeEnv) || !int.TryParse(logSizeEnv, out logPageSize))
+                if (string.IsNullOrEmpty(logSizeEnv) || !int.TryParse(logSizeEnv, out logPageSize))
                 {
                     logPageSize = _defaultLogPageSize;
                 }
 
-                int logRetentionDays;
-                string logRetentionDaysEnv = Environment.GetEnvironmentVariable($"{hostType.ToUpperInvariant()}_LOGRETENTION");
-                if (!string.IsNullOrEmpty(logRetentionDaysEnv) || !int.TryParse(logRetentionDaysEnv, out logRetentionDays))
+                if (string.IsNullOrEmpty(logRetentionDaysEnv) || !int.TryParse(logRetentionDaysEnv, out logRetentionDays))
                 {
                     logRetentionDays = _defaultLogRetentionDays;
                 }
@@ -132,6 +132,9 @@ namespace GitHub.Runner.Common
                 _netcoreHttpTrace = GetTrace("HttpTrace");
                 _diagListenerSubscription = DiagnosticListener.AllListeners.Subscribe(this);
             }
+
+            _trace.Info($"Maximum log size for {hostType.ToUpperInvariant()}: {logPageSize}, from env: {logSizeEnv}");
+            _trace.Info($"Maximum retention days for {hostType.ToUpperInvariant()}: {logRetentionDays}, from env: {logRetentionDaysEnv}");
 
             // Enable perf counter trace
             string perfCounterLocation = Environment.GetEnvironmentVariable("RUNNER_PERFLOG");
