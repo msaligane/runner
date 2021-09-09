@@ -39,6 +39,14 @@ def main(instance_number, container_file):
 	  .translate(str.maketrans({'+': r'\+', ' ': r'\ '}))	
     )
 
+    github_job_name = (os.environ.get('GITHUB_JOB_FULL') or 'unknown').lower()
+    
+    gh_env_list = ["GITHUB_JOB_FULL", "GITHUB_SHA", "GITHUB_RUN_ID"]
+
+    labels = ','.join(["{}={}".format(e.lower(), (os.environ.get(e) or 'null').lower()) for e in gh_env_list])
+
+    print(labels)
+
     gcloud_start = time.time()
 
     try:
@@ -51,6 +59,8 @@ def main(instance_number, container_file):
                 '--metadata=serial-port-enable=true,'
                 'ssh-keys=coordinator:'
                 f'{key} '
+                f'--labels='
+                f'{labels} '
                 '--no-restart-on-failure --tags=runners '
                 '--maintenance-policy=TERMINATE --preemptible '
                 '--no-service-account '

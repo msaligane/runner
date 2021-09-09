@@ -423,6 +423,8 @@ namespace GitHub.Runner.Listener
                                 var workerEnv = new Dictionary<string, string>(){
                                     {Constants.InstanceNumberVariable, Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable)},
                                     {"GITHUB_JOB_FULL", jobNameSanitized},
+                                    {"GITHUB_SHA", $"{message.ContextData["github"].ToJToken()["sha"]}"},
+                                    {"GITHUB_RUN_ID", $"{message.ContextData["github"].ToJToken()["run_id"]}"},
                                 };
                                 workerProcessTask = processInvoker.ExecuteAsync(
                                     workingDirectory: assemblyDirectory,
