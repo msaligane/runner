@@ -2,9 +2,19 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import sys, logging, os, json, threading, requests, time, datetime
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+if os.environ.get('RVC_DEBUG'):
+    logging_level = logging.DEBUG
+else:
+    logging_level = logging.INFO
+
+logging.basicConfig(level=logging_level, format="%(asctime)s %(levelname)s %(message)s")
+
+RVC_FORCE = os.environ.get('RVC_FORCE')
 
 def load_fallback():
+    if RVC_FORCE:
+        return RVC_FORCE
+
     fallback_path = os.path.realpath('../src/runnerversion')
     with open(fallback_path, 'r') as f:
         return f.readline().strip()
@@ -51,6 +61,8 @@ class RunnerVersionCacheHandler(BaseHTTPRequestHandler):
         return self.make_resp(404, '')
 
     def _set_response(self):
+        logging.debug(f'Responding with {RV}')
+
         with RV_LOCK:
             j = {"version": RV, "timestamp": RV_T} 
 
@@ -68,7 +80,11 @@ def run():
     update_rv_thr = threading.Thread(target=update_rv, daemon=True)
 
     try:
-        update_rv_thr.start()
+        if RVC_FORCE:
+            logging.info("Debug with value: {}".format(RVC_FORCE))
+        else:
+            update_rv_thr.start()
+
         httpd.serve_forever()
     except KeyboardInterrupt:
         pass
