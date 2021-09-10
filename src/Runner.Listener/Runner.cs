@@ -296,7 +296,6 @@ namespace GitHub.Runner.Listener
                     notification.StartClient(settings.MonitorSocketAddress);
 
                     bool autoUpdateInProgress = false;
-                    Task<bool> selfUpdateTask = null;
                     bool runOnceJobReceived = false;
                     jobDispatcher = HostContext.CreateService<IJobDispatcher>();
 
@@ -310,37 +309,26 @@ namespace GitHub.Runner.Listener
                             if (autoUpdateInProgress)
                             {
                                 Trace.Verbose("Auto update task running at backend, waiting for getNextMessage or selfUpdateTask to finish.");
-                                Task completeTask = await Task.WhenAny(getNextMessage, selfUpdateTask);
-                                if (completeTask == selfUpdateTask)
-                                {
-                                    autoUpdateInProgress = false;
-                                    if (await selfUpdateTask)
-                                    {
-                                        Trace.Info("Auto update task finished at backend, an runner update is ready to apply exit the current runner instance.");
-                                        Trace.Info("Stop message queue looping.");
-                                        messageQueueLoopTokenSource.Cancel();
-                                        try
-                                        {
-                                            await getNextMessage;
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            Trace.Info($"Ignore any exception after cancel message loop. {ex}");
-                                        }
 
-                                        if (runOnce)
-                                        {
-                                            return Constants.Runner.ReturnCode.RunOnceRunnerUpdating;
-                                        }
-                                        else
-                                        {
-                                            return Constants.Runner.ReturnCode.RunnerUpdating;
-                                        }
-                                    }
-                                    else
-                                    {
-                                        Trace.Info("Auto update task finished at backend, there is no available runner update needs to apply, continue message queue looping.");
-                                    }
+                                autoUpdateInProgress = false;
+
+                                messageQueueLoopTokenSource.Cancel();
+                                try
+                                {
+                                    await getNextMessage;
+                                }
+                                catch (Exception ex)
+                                {
+                                    Trace.Info($"Ignore any exception after cancel message loop. {ex}");
+                                }
+
+                                if (runOnce)
+                                {
+                                    return Constants.Runner.ReturnCode.RunOnceRunnerUpdating;
+                                }
+                                else
+                                {
+                                    return Constants.Runner.ReturnCode.RunnerUpdating;
                                 }
                             }
 
@@ -370,7 +358,16 @@ namespace GitHub.Runner.Listener
                             HostContext.WritePerfCounter($"MessageReceived_{message.MessageType}");
                             if (string.Equals(message.MessageType, AgentRefreshMessage.MessageType, StringComparison.OrdinalIgnoreCase))
                             {
-                                Trace.Info("Refresh message received, doing nothing.");
+                                if (autoUpdateInProgress == false)
+                                {
+                                    autoUpdateInProgress = true;
+                                    Trace.Info("Refresh message received, will restart the runner.");
+                                }
+                                else
+                                {
+                                    Trace.Info("Refresh message received but variable had already been flipped.");
+                                }
+
                             }
                             else if (string.Equals(message.MessageType, JobRequestMessageTypes.PipelineAgentJobRequest, StringComparison.OrdinalIgnoreCase))
                             {
