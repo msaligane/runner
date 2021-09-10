@@ -30,6 +30,15 @@ def update_rv():
 
     logging.info("Started update_rv")
 
+    # Delay for testing purposes.
+    initial_delay = os.environ.get('RVC_DELAY')
+
+    if os.environ.get('RVC_DELAY'):
+        try:
+            time.sleep(int(initial_delay))
+        except ValueError:
+            logging.error('Delay for update_rv set but not an integer')
+
     while True:
         try:
             r = requests.get(RV_URL)
