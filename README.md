@@ -80,6 +80,7 @@ cd buildroot && make BR2_EXTERNAL=../overlay/ scalenode_gcp_defconfig && make
 
 # Prepare a disk for GCP
 ./make_gcp_image.sh
+```
 
 1. Save the bucket's IAM policy to a temporary (arbitrary) JSON file
 ```
