@@ -81,6 +81,35 @@ cd buildroot && make BR2_EXTERNAL=../overlay/ scalenode_gcp_defconfig && make
 # Prepare a disk for GCP
 ./make_gcp_image.sh
 
+1. Save the bucket's IAM policy to a temporary (arbitrary) JSON file
+```
+gsutil iam get gs://$BUCKET > /arbitrary/path/file.json
+```
+2. Get the project name and default service account email address. Adjust filter accordingly if a different service account is used
+```
+export PROJECT=$(gcloud config get-value project)
+export SA=$(gcloud iam service-accounts list --filter=default | grep -E -o '[a-z0-9._%+-]+@[a-z0-9.-]+(\.[a-z0-9._%+-]+)?[a-z]{2,4}')
+```
+3. Get the absolute path of the Bucket config file
+```
+export BUCKET_FILE=/arbitrary/path/file.json
+```
+4. Using the `sed` utility to insert required permissions associated with the bucket
+```
+sed -i 's/"bindings": \[/"bindings": \[\
+    {\
+      "members": \[\
+        "projectEditor:'"$PROJECT"'",\
+        "projectOwner:'"$PROJECT"'",\
+        "serviceAccount:'"$SA"'"\
+      \],\
+      "role": "roles\/storage.legacyBucketOwner"\
+    \},/' $BUCKET_FILE
+```
+5. Upload the modified bucket file back to GCloud
+```
+gsutil iam set $BUCKET_FILE gs://$BUCKET
+```
 # Upload the resulting tar archive
 ./upload_gcp_image.sh $PROJECT $BUCKET
 ```
