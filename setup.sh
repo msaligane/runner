@@ -42,7 +42,8 @@ cd ../ && \
     ./make_gcp_image.sh && \
     ./upload_gcp_image.sh $PROJECT $BUCKET
 
-
+# ssh into coordinator instance to setup runner and run conifg
+cd ~/runner
 export name=$(gcloud compute instances list | grep gha | awk '{print $1}') && \
     export zone=$(gcloud compute instances list | grep gha | awk '{print $2}') && \
     cat coor.sh | gcloud compute ssh $name --zone=$zone
