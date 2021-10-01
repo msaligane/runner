@@ -50,9 +50,10 @@ gsutil rm gs://catx-ext-umich-worker-bucket/scalenode-9e1d63d.tar.gz
 gcloud compute ssh instance-2 --ssh-flag="-ServerAliveInterval=30"
 ```
 
-Before running setup.sh make sure that the following is done:
+Before running `setup.sh` make sure that the following is done:
+- Install `git` upon ssh to the created instance
 - The archive in the bucket and corresponding image is deleted
-- Fill in the TOKEN in `coor.sh`
+- Fill in the `TOKEN` in `coor.sh`
 
 
 ### Host prerequisites
