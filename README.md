@@ -53,8 +53,11 @@ gcloud compute ssh instance-2 --ssh-flag="-ServerAliveInterval=30"
 Before running `setup.sh` make sure that the following is done:
 - Install `git` upon ssh to the created instance
 - The archive in the bucket and corresponding image is deleted
+    - Screenshot to-be included
 - Fill in the `TOKEN` in `coor.sh`
+    - The `TOKEN` can be found here: https://github.com/idea-fasoc/OpenFASOC/settings/actions/runners/new?arch=x64&os=linux under `configure`. The `TOKEN` expires in a hour.
 
+After everything is setup, run `setup.sh` to build everything from scratch. (This script assumes that all virtual infrastructure created by Terraform does not need to be re-configured.)
 
 ### Host prerequisites
 
